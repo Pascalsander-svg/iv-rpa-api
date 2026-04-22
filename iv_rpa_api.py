@@ -1,11 +1,13 @@
 """
-IV Form RPA API — Async Version
---------------------------------
-Returns immediately with a job_id, runs Playwright in background thread.
-WatsonX polls /status/<job_id> for the result.
+IV Form RPA API — Async Version 3.1
+-------------------------------------
+Flask API + Playwright. Returns immediately with job_id.
+Poll /status/<job_id> for result.
+CORS enabled for cross-origin requests.
 """
 
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 from playwright.sync_api import sync_playwright
 import traceback
 import os
@@ -13,6 +15,7 @@ import uuid
 import threading
 
 app = Flask(__name__)
+CORS(app)
 
 # In-memory job store
 jobs = {}
@@ -155,13 +158,13 @@ def fill_form_001001(page, fields):
         except Exception:
             pass
 
-    click_next(page)  # -> Page 3 Zivilstand
-    click_next(page)  # -> Page 4 Kinder
-    click_next(page)  # -> Page 5 Allgemeine Angaben
+    click_next(page)  # Page 3: Zivilstand
+    click_next(page)  # Page 4: Kinder
+    click_next(page)  # Page 5: Allgemeine Angaben
 
     page.wait_for_timeout(2000)
     wait_and_select(page, SEL["nationality"], label=fields.get("nationality", ""))
-    click_next(page)  # -> Page 6 Bildung/Beruf
+    click_next(page)  # Page 6: Bildung/Beruf
 
     page.wait_for_timeout(2000)
     for sel in ["input[id*='employer']", "input[id*='arbeitgeber']"]:
@@ -171,7 +174,7 @@ def fill_form_001001(page, fields):
             break
         except Exception:
             pass
-    click_next(page)  # -> Page 7 Gesundheit
+    click_next(page)  # Page 7: Gesundheit
 
     page.wait_for_timeout(2000)
     for sel in ["input[id*='physician']", "input[id*='arzt']", "input[id*='doctor']"]:
@@ -186,7 +189,7 @@ def fill_form_001001(page, fields):
     for _ in range(5):
         click_next(page)
 
-    # Page 13: Canton selection
+    # Page 13: Canton
     page.wait_for_timeout(2000)
     for sel in ["select[id*='kanton']", "select[id*='canton']"]:
         try:
@@ -198,7 +201,6 @@ def fill_form_001001(page, fields):
 
 
 def run_playwright_job(job_id, form_number, form_url, fields):
-    """Runs in background thread. Updates jobs[job_id] when done."""
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -239,7 +241,6 @@ def run_playwright_job(job_id, form_number, form_url, fields):
 
 @app.route("/fill-form", methods=["POST"])
 def fill_form():
-    """Starts job immediately, returns job_id. Does NOT wait for Playwright."""
     data = request.get_json()
 
     if not data:
@@ -275,7 +276,6 @@ def fill_form():
 
 @app.route("/status/<job_id>", methods=["GET"])
 def get_status(job_id):
-    """Poll this endpoint to check if the job is done."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({"status": "error", "message": "Job not found"}), 404
@@ -284,8 +284,6 @@ def get_status(job_id):
 
 @app.route("/screenshot/<job_id>", methods=["GET"])
 def get_screenshot(job_id):
-    """Returns screenshot of filled form."""
-    # Try both naming patterns
     for form_number in ["001.001", "001.003"]:
         path = f"/tmp/form_{form_number}_{job_id}.png"
         if os.path.exists(path):
@@ -298,7 +296,7 @@ def health():
     return jsonify({
         "status": "ok",
         "service": "IV RPA API",
-        "version": "3.0-async",
+        "version": "3.1-async-cors",
         "active_jobs": len([j for j in jobs.values() if j.get("status") == "processing"])
     })
 
