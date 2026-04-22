@@ -243,7 +243,8 @@ def fill_form():
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            page.goto(form_url, wait_until="networkidle", timeout=30000)
+            page.goto(form_url, wait_until="domcontentloaded", timeout=60000)
+page.wait_for_timeout(3000)
 
             if form_number == "001.001":
                 fill_form_001001(page, fields)
