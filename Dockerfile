@@ -4,13 +4,13 @@ RUN apt-get update && apt-get install -y \
     wget curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install flask playwright
+RUN pip install flask playwright flask-cors
 
 RUN playwright install chromium --with-deps
 
 WORKDIR /app
 COPY iv_rpa_api.py .
 
-EXPOSE 5000
+EXPOSE 10000
 
 CMD ["python", "iv_rpa_api.py"]
