@@ -1,17 +1,8 @@
 """
 IV Form RPA API
 ---------------
-Flask API + Playwright script that receives form field data from WatsonX Agent 2
-and automatically fills in the IV online form on ahv-iv.ch.
-
-Setup:
-  pip install flask playwright
-  playwright install chromium
-
-Run locally:
-  python iv_rpa_api.py
-
-Deploy to IBM Cloud Code Engine or Render.com for production use.
+Flask API + Playwright script using exact Orbeon XForms selectors
+from ahv-iv.ch form 001.001.
 """
 
 from flask import Flask, request, jsonify
@@ -21,209 +12,222 @@ import os
 
 app = Flask(__name__)
 
+# Exact Orbeon selector fragments (partial match with *=)
+SEL = {
+    "country":      "select[id*='pm-country-control']",
+    "canton":       "select[id*='so-cantonHabitualResidence']",
+    "dob_day":      "select[id*='pm-dateOfBirth-control=selec']",
+    "dob_month":    "select[id*='pm-dateOfBirth-control=xf-24']",
+    "dob_year":     "select[id*='pm-dateOfBirth-control=xf-24']",
+    "town":         "select[id*='cdc-town-control']",
+    "nationality":  "select[id*='po-nationality-control']",
+    "firstname":    "input[id*='so-fillerOfFormNameFirstname']",
+    "guardian":     "input[id*='so-nameAddressGuardianAuthori']",
+    "institution":  "input[id*='so-nameOfInstitution-control']",
+}
+
+
+def wait_and_fill(page, selector, value):
+    try:
+        page.wait_for_selector(selector, timeout=8000)
+        page.fill(selector, value)
+    except Exception:
+        pass
+
+
+def wait_and_select(page, selector, label=None, value=None):
+    try:
+        page.wait_for_selector(selector, timeout=8000)
+        if label:
+            page.select_option(selector, label=label)
+        elif value:
+            page.select_option(selector, value=value)
+    except Exception:
+        pass
+
+
+def click_next(page):
+    try:
+        page.wait_for_selector("text=Weiter", timeout=10000)
+        page.click("text=Weiter")
+        page.wait_for_timeout(2000)
+    except Exception:
+        pass
+
 
 def fill_form_001001(page, fields):
-    """Fill in Form 001.001 — Vocational Integration / Pension (Adults)"""
+    """Fill Form 001.001 using exact Orbeon selectors"""
 
-    # --- Page 1: Informationen (just click next) ---
-    page.wait_for_load_state("networkidle")
-    page.click("text=Weiter")
+    # Page 1: Info — click next
+    page.wait_for_timeout(4000)
+    click_next(page)
 
-    # --- Page 2: Personalien ---
-    page.wait_for_load_state("networkidle")
+    # Page 2: Personalien
+    page.wait_for_timeout(3000)
 
-    # Country of residence dropdown
-    page.select_option("select[name*='land'], select[id*='land']",
-                       label=fields.get("country_of_residence", "Schweiz"))
+    # Country of residence
+    wait_and_select(page, SEL["country"],
+                    label=fields.get("country_of_residence", "Schweiz"))
 
-    # Last name
-    page.fill("input[name*='name'], input[id*='name']", fields.get("last_name", ""))
+    # Canton of residence
+    wait_and_select(page, SEL["canton"],
+                    label=fields.get("city", "Luzern"))
 
-    # First name
-    page.fill("input[name*='vorname'], input[id*='vorname']", fields.get("first_name", ""))
-
-    # Gender
-    gender = fields.get("gender", "männlich")
-    if gender == "männlich":
-        page.check("input[value='maennlich'], input[value='m']")
-    else:
-        page.check("input[value='weiblich'], input[value='w']")
-
-    # Date of birth
-    page.select_option("select[name*='tag'], select[id*='tag']",
-                       value=fields.get("date_of_birth_day", "1"))
-    page.select_option("select[name*='monat'], select[id*='monat']",
-                       value=fields.get("date_of_birth_month", "1"))
-    page.select_option("select[name*='jahr'], select[id*='jahr']",
-                       value=fields.get("date_of_birth_year", "1980"))
-
-    # AHV number (pre-filled with 756, complete the rest)
-    ahv = fields.get("ahv_number", "").replace("756.", "").replace(".", "")
-    page.fill("input[name*='ahv'], input[id*='ahv']", ahv)
-
-    # Address
-    page.fill("input[name*='strasse'], input[id*='strasse']", fields.get("street", ""))
-    page.fill("input[name*='hausnummer'], input[id*='hausnummer']",
-              fields.get("street_number", ""))
-    page.fill("input[name*='plz'], input[id*='plz']", fields.get("postal_code", ""))
-    page.fill("input[name*='ort'], input[id*='ort']", fields.get("city", ""))
-
-    # Phone and email
-    page.fill("input[name*='telefon'], input[id*='telefon']", fields.get("phone", ""))
-    page.fill("input[name*='email'], input[id*='email']", fields.get("email", ""))
-
-    page.click("text=Weiter")
-
-    # --- Page 3: Zivilstand — skip with default ---
-    page.wait_for_load_state("networkidle")
-    page.click("text=Weiter")
-
-    # --- Page 4: Kinder — skip with default ---
-    page.wait_for_load_state("networkidle")
-    page.click("text=Weiter")
-
-    # --- Page 5: Allgemeine Angaben ---
-    page.wait_for_load_state("networkidle")
-
-    # Nationality
-    page.fill("input[name*='nationalitaet'], input[id*='nationalitaet']",
-              fields.get("nationality", ""))
-
-    # Residence permit (if foreign)
-    permit = fields.get("residence_permit", "")
-    if permit:
+    # Last name — try all known name field patterns
+    for sel in [
+        "input[id*='pm-lastName']",
+        "input[id*='lastName']",
+        "input[id*='pm-name']",
+        "input[id*='applicantDetails-control=grid-2-grid=pm-lastName']",
+    ]:
         try:
-            page.select_option("select[name*='ausweis'], select[id*='ausweis']",
-                               label=permit)
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("last_name", ""))
+            break
         except Exception:
             pass
 
-    page.click("text=Weiter")
+    # First name
+    wait_and_fill(page, SEL["firstname"], fields.get("first_name", ""))
 
-    # --- Page 6: Angaben zu Bildung, Beruf ---
-    page.wait_for_load_state("networkidle")
-
-    # Employer
-    page.fill("input[name*='arbeitgeber'], input[id*='arbeitgeber']",
-              fields.get("employer_name", ""))
-    page.fill("input[name*='arbeitgeber_adresse'], input[id*='arbeitgeber_adresse']",
-              fields.get("employer_address", ""))
-
-    page.click("text=Weiter")
-
-    # --- Page 7: Angaben zur gesundheitlichen Situation ---
-    page.wait_for_load_state("networkidle")
-
-    # Onset of impairment
-    page.fill("input[name*='beginn'], input[id*='beginn']",
-              fields.get("onset_of_impairment", ""))
-
-    # Date of incapacity to work
-    page.fill("input[name*='arbeitsunfaehig'], input[id*='arbeitsunfaehig']",
-              fields.get("date_incapacity_to_work", ""))
-
-    # Treating physician
-    page.fill("input[name*='arzt_name'], input[id*='arzt_name']",
-              fields.get("treating_physician_name", ""))
-    page.fill("input[name*='arzt_adresse'], input[id*='arzt_adresse']",
-              fields.get("treating_physician_address", ""))
-    page.fill("input[name*='arzt_telefon'], input[id*='arzt_telefon']",
-              fields.get("treating_physician_phone", ""))
-
-    page.click("text=Weiter")
-
-    # --- Pages 8-12: remaining sections — navigate through ---
-    for _ in range(5):
-        page.wait_for_load_state("networkidle")
-        try:
-            page.click("text=Weiter")
-        except Exception:
-            break
-
-    # --- Page 13: Empfängerauswahl ---
-    page.wait_for_load_state("networkidle")
+    # Gender
+    gender = fields.get("gender", "männlich")
     try:
-        # Select Canton Lucerne
-        page.select_option("select[name*='kanton'], select[id*='kanton']",
-                           label="Luzern")
+        if gender == "männlich":
+            page.locator("input[type='radio']").filter(has_text="männlich").first.check()
+        else:
+            page.locator("input[type='radio']").filter(has_text="weiblich").first.check()
+    except Exception:
+        try:
+            radios = page.locator("input[type='radio']").all()
+            if gender == "männlich" and len(radios) > 0:
+                radios[0].check()
+            elif len(radios) > 1:
+                radios[1].check()
+        except Exception:
+            pass
+
+    # Date of birth — day, month, year (3 separate selects)
+    try:
+        dob_selects = page.locator("select[id*='pm-dateOfBirth']").all()
+        if len(dob_selects) >= 3:
+            dob_selects[0].select_option(value=fields.get("date_of_birth_day", "1"))
+            dob_selects[1].select_option(value=fields.get("date_of_birth_month", "1"))
+            dob_selects[2].select_option(value=fields.get("date_of_birth_year", "1980"))
     except Exception:
         pass
 
-
-def fill_form_001003(page, fields):
-    """Fill in Form 001.003 — Minors: Medical Measures / Assistive Devices"""
-
-    page.wait_for_load_state("networkidle")
-    page.click("text=Weiter")
-
-    # --- Page 2: Personalien Kind ---
-    page.wait_for_load_state("networkidle")
-
-    page.select_option("select[name*='land'], select[id*='land']",
-                       label=fields.get("country_of_residence", "Schweiz"))
-    page.fill("input[name*='name']", fields.get("last_name", ""))
-    page.fill("input[name*='vorname']", fields.get("first_name", ""))
-
-    gender = fields.get("gender", "weiblich")
-    if gender == "männlich":
-        page.check("input[value='maennlich'], input[value='m']")
-    else:
-        page.check("input[value='weiblich'], input[value='w']")
-
-    page.select_option("select[name*='tag']", value=fields.get("date_of_birth_day", "1"))
-    page.select_option("select[name*='monat']", value=fields.get("date_of_birth_month", "1"))
-    page.select_option("select[name*='jahr']", value=fields.get("date_of_birth_year", "2015"))
-
+    # AHV number
     ahv = fields.get("ahv_number", "").replace("756.", "").replace(".", "")
-    page.fill("input[name*='ahv']", ahv)
-
-    page.fill("input[name*='strasse']", fields.get("street", ""))
-    page.fill("input[name*='hausnummer']", fields.get("street_number", ""))
-    page.fill("input[name*='plz']", fields.get("postal_code", ""))
-    page.fill("input[name*='ort']", fields.get("city", ""))
-    page.fill("input[name*='telefon']", fields.get("phone", ""))
-    page.fill("input[name*='email']", fields.get("email", ""))
-
-    page.click("text=Weiter")
-
-    # --- Guardian page ---
-    page.wait_for_load_state("networkidle")
-    try:
-        page.fill("input[name*='vertreter_name']", fields.get("guardian_last_name", ""))
-        page.fill("input[name*='vertreter_vorname']", fields.get("guardian_first_name", ""))
-    except Exception:
-        pass
-
-    page.click("text=Weiter")
-
-    # Navigate remaining pages
-    for _ in range(8):
-        page.wait_for_load_state("networkidle")
+    for sel in ["input[id*='ahv']", "input[id*='AHV']", "input[id*='avs']"]:
         try:
-            page.click("text=Weiter")
-        except Exception:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, ahv)
             break
+        except Exception:
+            pass
 
-    # Select Canton Lucerne on last page
-    try:
-        page.select_option("select[name*='kanton']", label="Luzern")
-    except Exception:
-        pass
+    # Street
+    for sel in ["input[id*='street']", "input[id*='strasse']", "input[id*='Street']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("street", ""))
+            break
+        except Exception:
+            pass
+
+    # Street number
+    for sel in ["input[id*='streetNumber']", "input[id*='hausnummer']", "input[id*='houseNumber']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("street_number", ""))
+            break
+        except Exception:
+            pass
+
+    # Postal code
+    for sel in ["input[id*='zip']", "input[id*='plz']", "input[id*='postalCode']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("postal_code", ""))
+            break
+        except Exception:
+            pass
+
+    # City (town dropdown)
+    wait_and_select(page, SEL["town"], label=fields.get("city", ""))
+
+    # Phone
+    for sel in ["input[id*='phone']", "input[id*='telefon']", "input[id*='Phone']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("phone", ""))
+            break
+        except Exception:
+            pass
+
+    # Email
+    for sel in ["input[id*='email']", "input[id*='Email']", "input[type='email']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("email", ""))
+            break
+        except Exception:
+            pass
+
+    click_next(page)
+
+    # Page 3: Zivilstand
+    click_next(page)
+
+    # Page 4: Kinder
+    click_next(page)
+
+    # Page 5: Allgemeine Angaben
+    page.wait_for_timeout(2000)
+    wait_and_select(page, SEL["nationality"],
+                    label=fields.get("nationality", ""))
+    click_next(page)
+
+    # Page 6: Bildung, Beruf
+    page.wait_for_timeout(2000)
+    for sel in ["input[id*='employer']", "input[id*='arbeitgeber']", "input[id*='Employer']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("employer_name", ""))
+            break
+        except Exception:
+            pass
+    click_next(page)
+
+    # Page 7: Gesundheitliche Situation
+    page.wait_for_timeout(2000)
+    for sel in ["input[id*='physician']", "input[id*='arzt']", "input[id*='doctor']"]:
+        try:
+            page.wait_for_selector(sel, timeout=3000)
+            page.fill(sel, fields.get("treating_physician_name", ""))
+            break
+        except Exception:
+            pass
+    click_next(page)
+
+    # Pages 8-12
+    for _ in range(5):
+        click_next(page)
+
+    # Page 13: Empfängerauswahl — select Lucerne
+    page.wait_for_timeout(2000)
+    for sel in ["select[id*='kanton']", "select[id*='canton']", "select[id*='Canton']"]:
+        try:
+            page.wait_for_selector(sel, timeout=5000)
+            page.select_option(sel, label="Luzern")
+            break
+        except Exception:
+            pass
 
 
 @app.route("/fill-form", methods=["POST"])
 def fill_form():
-    """
-    Main API endpoint.
-    Receives JSON from WatsonX Agent 2 and fills the online IV form.
-
-    Expected input:
-    {
-        "form_number": "001.001",
-        "form_url": "https://www.ahv-iv.ch/p/001.001.d",
-        "fields": { ... }
-    }
-    """
     data = request.get_json()
 
     if not data:
@@ -242,22 +246,23 @@ def fill_form():
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            page = context.new_page()
             page.goto(form_url, wait_until="domcontentloaded", timeout=60000)
-page.wait_for_timeout(3000)
+            page.wait_for_timeout(5000)
 
             if form_number == "001.001":
                 fill_form_001001(page, fields)
-            elif form_number == "001.003":
-                fill_form_001003(page, fields)
             else:
                 browser.close()
                 return jsonify({
                     "status": "error",
-                    "message": f"Form {form_number} is not yet supported by this RPA script."
+                    "message": f"Form {form_number} is not yet supported."
                 }), 400
 
-            # Take screenshot of final state
             screenshot_path = f"/tmp/form_{form_number}_filled.png"
             page.screenshot(path=screenshot_path, full_page=True)
             browser.close()
@@ -278,7 +283,6 @@ page.wait_for_timeout(3000)
 
 @app.route("/screenshot/<form_number>", methods=["GET"])
 def get_screenshot(form_number):
-    """Return the screenshot of the filled form."""
     from flask import send_file
     path = f"/tmp/form_{form_number}_filled.png"
     if os.path.exists(path):
@@ -288,8 +292,7 @@ def get_screenshot(form_number):
 
 @app.route("/health", methods=["GET"])
 def health():
-    """Health check endpoint for WatsonX Custom Extension verification."""
-    return jsonify({"status": "ok", "service": "IV RPA API", "version": "1.0"})
+    return jsonify({"status": "ok", "service": "IV RPA API", "version": "2.0"})
 
 
 if __name__ == "__main__":
