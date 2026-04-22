@@ -1,29 +1,27 @@
 """
-IV Form RPA API
----------------
-Flask API + Playwright script using exact Orbeon XForms selectors
-from ahv-iv.ch form 001.001.
+IV Form RPA API — Async Version
+--------------------------------
+Returns immediately with a job_id, runs Playwright in background thread.
+WatsonX polls /status/<job_id> for the result.
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from playwright.sync_api import sync_playwright
 import traceback
 import os
+import uuid
+import threading
 
 app = Flask(__name__)
 
-# Exact Orbeon selector fragments (partial match with *=)
+# In-memory job store
+jobs = {}
+
 SEL = {
-    "country":      "select[id*='pm-country-control']",
-    "canton":       "select[id*='so-cantonHabitualResidence']",
-    "dob_day":      "select[id*='pm-dateOfBirth-control=selec']",
-    "dob_month":    "select[id*='pm-dateOfBirth-control=xf-24']",
-    "dob_year":     "select[id*='pm-dateOfBirth-control=xf-24']",
-    "town":         "select[id*='cdc-town-control']",
-    "nationality":  "select[id*='po-nationality-control']",
-    "firstname":    "input[id*='so-fillerOfFormNameFirstname']",
-    "guardian":     "input[id*='so-nameAddressGuardianAuthori']",
-    "institution":  "input[id*='so-nameOfInstitution-control']",
+    "country":     "select[id*='pm-country-control']",
+    "canton":      "select[id*='so-cantonHabitualResidence']",
+    "nationality": "select[id*='po-nationality-control']",
+    "firstname":   "input[id*='so-fillerOfFormNameFirstname']",
 }
 
 
@@ -50,36 +48,26 @@ def click_next(page):
     try:
         page.wait_for_selector("text=Weiter", timeout=10000)
         page.click("text=Weiter")
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(2500)
     except Exception:
         pass
 
 
 def fill_form_001001(page, fields):
-    """Fill Form 001.001 using exact Orbeon selectors"""
-
-    # Page 1: Info — click next
-    page.wait_for_timeout(4000)
+    page.wait_for_timeout(5000)
     click_next(page)
-
-    # Page 2: Personalien
     page.wait_for_timeout(3000)
 
-    # Country of residence
+    # Country
     wait_and_select(page, SEL["country"],
                     label=fields.get("country_of_residence", "Schweiz"))
 
-    # Canton of residence
-    wait_and_select(page, SEL["canton"],
-                    label=fields.get("city", "Luzern"))
+    # Canton
+    wait_and_select(page, SEL["canton"], label=fields.get("city", "Luzern"))
 
-    # Last name — try all known name field patterns
-    for sel in [
-        "input[id*='pm-lastName']",
-        "input[id*='lastName']",
-        "input[id*='pm-name']",
-        "input[id*='applicantDetails-control=grid-2-grid=pm-lastName']",
-    ]:
+    # Last name
+    for sel in ["input[id*='pm-lastName']", "input[id*='lastName']",
+                "input[id*='pm-name']"]:
         try:
             page.wait_for_selector(sel, timeout=3000)
             page.fill(sel, fields.get("last_name", ""))
@@ -93,21 +81,15 @@ def fill_form_001001(page, fields):
     # Gender
     gender = fields.get("gender", "männlich")
     try:
-        if gender == "männlich":
-            page.locator("input[type='radio']").filter(has_text="männlich").first.check()
-        else:
-            page.locator("input[type='radio']").filter(has_text="weiblich").first.check()
+        radios = page.locator("input[type='radio']").all()
+        if gender == "männlich" and len(radios) > 0:
+            radios[0].check()
+        elif len(radios) > 1:
+            radios[1].check()
     except Exception:
-        try:
-            radios = page.locator("input[type='radio']").all()
-            if gender == "männlich" and len(radios) > 0:
-                radios[0].check()
-            elif len(radios) > 1:
-                radios[1].check()
-        except Exception:
-            pass
+        pass
 
-    # Date of birth — day, month, year (3 separate selects)
+    # Date of birth
     try:
         dob_selects = page.locator("select[id*='pm-dateOfBirth']").all()
         if len(dob_selects) >= 3:
@@ -117,7 +99,7 @@ def fill_form_001001(page, fields):
     except Exception:
         pass
 
-    # AHV number
+    # AHV
     ahv = fields.get("ahv_number", "").replace("756.", "").replace(".", "")
     for sel in ["input[id*='ahv']", "input[id*='AHV']", "input[id*='avs']"]:
         try:
@@ -128,7 +110,7 @@ def fill_form_001001(page, fields):
             pass
 
     # Street
-    for sel in ["input[id*='street']", "input[id*='strasse']", "input[id*='Street']"]:
+    for sel in ["input[id*='street']", "input[id*='strasse']"]:
         try:
             page.wait_for_selector(sel, timeout=3000)
             page.fill(sel, fields.get("street", ""))
@@ -137,7 +119,8 @@ def fill_form_001001(page, fields):
             pass
 
     # Street number
-    for sel in ["input[id*='streetNumber']", "input[id*='hausnummer']", "input[id*='houseNumber']"]:
+    for sel in ["input[id*='streetNumber']", "input[id*='hausnummer']",
+                "input[id*='houseNumber']"]:
         try:
             page.wait_for_selector(sel, timeout=3000)
             page.fill(sel, fields.get("street_number", ""))
@@ -154,11 +137,8 @@ def fill_form_001001(page, fields):
         except Exception:
             pass
 
-    # City (town dropdown)
-    wait_and_select(page, SEL["town"], label=fields.get("city", ""))
-
     # Phone
-    for sel in ["input[id*='phone']", "input[id*='telefon']", "input[id*='Phone']"]:
+    for sel in ["input[id*='phone']", "input[id*='telefon']"]:
         try:
             page.wait_for_selector(sel, timeout=3000)
             page.fill(sel, fields.get("phone", ""))
@@ -167,7 +147,7 @@ def fill_form_001001(page, fields):
             pass
 
     # Email
-    for sel in ["input[id*='email']", "input[id*='Email']", "input[type='email']"]:
+    for sel in ["input[id*='email']", "input[type='email']"]:
         try:
             page.wait_for_selector(sel, timeout=3000)
             page.fill(sel, fields.get("email", ""))
@@ -175,32 +155,24 @@ def fill_form_001001(page, fields):
         except Exception:
             pass
 
-    click_next(page)
+    click_next(page)  # -> Page 3 Zivilstand
+    click_next(page)  # -> Page 4 Kinder
+    click_next(page)  # -> Page 5 Allgemeine Angaben
 
-    # Page 3: Zivilstand
-    click_next(page)
-
-    # Page 4: Kinder
-    click_next(page)
-
-    # Page 5: Allgemeine Angaben
     page.wait_for_timeout(2000)
-    wait_and_select(page, SEL["nationality"],
-                    label=fields.get("nationality", ""))
-    click_next(page)
+    wait_and_select(page, SEL["nationality"], label=fields.get("nationality", ""))
+    click_next(page)  # -> Page 6 Bildung/Beruf
 
-    # Page 6: Bildung, Beruf
     page.wait_for_timeout(2000)
-    for sel in ["input[id*='employer']", "input[id*='arbeitgeber']", "input[id*='Employer']"]:
+    for sel in ["input[id*='employer']", "input[id*='arbeitgeber']"]:
         try:
             page.wait_for_selector(sel, timeout=3000)
             page.fill(sel, fields.get("employer_name", ""))
             break
         except Exception:
             pass
-    click_next(page)
+    click_next(page)  # -> Page 7 Gesundheit
 
-    # Page 7: Gesundheitliche Situation
     page.wait_for_timeout(2000)
     for sel in ["input[id*='physician']", "input[id*='arzt']", "input[id*='doctor']"]:
         try:
@@ -211,13 +183,12 @@ def fill_form_001001(page, fields):
             pass
     click_next(page)
 
-    # Pages 8-12
     for _ in range(5):
         click_next(page)
 
-    # Page 13: Empfängerauswahl — select Lucerne
+    # Page 13: Canton selection
     page.wait_for_timeout(2000)
-    for sel in ["select[id*='kanton']", "select[id*='canton']", "select[id*='Canton']"]:
+    for sel in ["select[id*='kanton']", "select[id*='canton']"]:
         try:
             page.wait_for_selector(sel, timeout=5000)
             page.select_option(sel, label="Luzern")
@@ -226,8 +197,49 @@ def fill_form_001001(page, fields):
             pass
 
 
+def run_playwright_job(job_id, form_number, form_url, fields):
+    """Runs in background thread. Updates jobs[job_id] when done."""
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            page = context.new_page()
+            page.goto(form_url, wait_until="domcontentloaded", timeout=60000)
+
+            if form_number == "001.001":
+                fill_form_001001(page, fields)
+            else:
+                browser.close()
+                jobs[job_id] = {
+                    "status": "error",
+                    "message": f"Form {form_number} not yet supported."
+                }
+                return
+
+            screenshot_path = f"/tmp/form_{form_number}_{job_id}.png"
+            page.screenshot(path=screenshot_path, full_page=True)
+            browser.close()
+
+        jobs[job_id] = {
+            "status": "success",
+            "message": f"Form {form_number} filled successfully.",
+            "screenshot_url": f"/screenshot/{job_id}"
+        }
+
+    except Exception as e:
+        jobs[job_id] = {
+            "status": "error",
+            "message": str(e),
+            "detail": traceback.format_exc()
+        }
+
+
 @app.route("/fill-form", methods=["POST"])
 def fill_form():
+    """Starts job immediately, returns job_id. Does NOT wait for Playwright."""
     data = request.get_json()
 
     if not data:
@@ -243,56 +255,52 @@ def fill_form():
             "message": "Missing required fields: form_number, form_url, or fields"
         }), 400
 
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
-            page = context.new_page()
-            page.goto(form_url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(5000)
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {"status": "processing"}
 
-            if form_number == "001.001":
-                fill_form_001001(page, fields)
-            else:
-                browser.close()
-                return jsonify({
-                    "status": "error",
-                    "message": f"Form {form_number} is not yet supported."
-                }), 400
+    thread = threading.Thread(
+        target=run_playwright_job,
+        args=(job_id, form_number, form_url, fields),
+        daemon=True
+    )
+    thread.start()
 
-            screenshot_path = f"/tmp/form_{form_number}_filled.png"
-            page.screenshot(path=screenshot_path, full_page=True)
-            browser.close()
-
-        return jsonify({
-            "status": "success",
-            "message": f"Form {form_number} filled successfully.",
-            "screenshot_url": f"/screenshot/{form_number}"
-        })
-
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e),
-            "detail": traceback.format_exc()
-        }), 500
+    return jsonify({
+        "status": "processing",
+        "job_id": job_id,
+        "message": "Form filling started. Poll /status/" + job_id + " for result.",
+        "status_url": f"/status/{job_id}"
+    })
 
 
-@app.route("/screenshot/<form_number>", methods=["GET"])
-def get_screenshot(form_number):
-    from flask import send_file
-    path = f"/tmp/form_{form_number}_filled.png"
-    if os.path.exists(path):
-        return send_file(path, mimetype="image/png")
+@app.route("/status/<job_id>", methods=["GET"])
+def get_status(job_id):
+    """Poll this endpoint to check if the job is done."""
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"status": "error", "message": "Job not found"}), 404
+    return jsonify(job)
+
+
+@app.route("/screenshot/<job_id>", methods=["GET"])
+def get_screenshot(job_id):
+    """Returns screenshot of filled form."""
+    # Try both naming patterns
+    for form_number in ["001.001", "001.003"]:
+        path = f"/tmp/form_{form_number}_{job_id}.png"
+        if os.path.exists(path):
+            return send_file(path, mimetype="image/png")
     return jsonify({"status": "error", "message": "Screenshot not found"}), 404
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "IV RPA API", "version": "2.0"})
+    return jsonify({
+        "status": "ok",
+        "service": "IV RPA API",
+        "version": "3.0-async",
+        "active_jobs": len([j for j in jobs.values() if j.get("status") == "processing"])
+    })
 
 
 if __name__ == "__main__":
