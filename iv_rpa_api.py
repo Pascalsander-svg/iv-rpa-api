@@ -1,234 +1,172 @@
 """
-IV Form RPA API — Async Version 3.1
--------------------------------------
-Flask API + Playwright. Returns immediately with job_id.
-Poll /status/<job_id> for result.
-CORS enabled for cross-origin requests.
+IV Form RPA API — Version 4.0 PDF Direct Fill
+-----------------------------------------------
+Downloads the official BSV PDF, overlays filled fields using reportlab,
+and returns a ready-to-print PDF. No browser automation needed.
 """
 
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from playwright.sync_api import sync_playwright
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from pypdf import PdfReader, PdfWriter
+import requests
 import traceback
 import os
 import uuid
 import threading
+import io
 
 app = Flask(__name__)
 CORS(app)
 
-# In-memory job store
 jobs = {}
 
-SEL = {
-    "country":     "select[id*='pm-country-control']",
-    "canton":      "select[id*='so-cantonHabitualResidence']",
-    "nationality": "select[id*='po-nationality-control']",
-    "firstname":   "input[id*='so-fillerOfFormNameFirstname']",
+# Field coordinates for Form 001.001 (x, y, page_index)
+# Coordinates are in points (72 pts = 1 inch) from bottom-left
+# Page size A4: 595 x 842 pts
+# These are approximate — adjust after first test print
+FIELD_COORDS_001001 = {
+    # Page 1 (index 0) — Personalien
+    "last_name":               (0, 155, 765),
+    "first_name":              (0, 320, 765),
+    "date_of_birth":           (0, 155, 735),
+    "ahv_number":              (0, 320, 735),
+    "street":                  (0, 155, 705),
+    "street_number":           (0, 430, 705),
+    "postal_code":             (0, 155, 675),
+    "city":                    (0, 280, 675),
+    "phone":                   (0, 155, 645),
+    "email":                   (0, 320, 645),
+    "nationality":             (0, 155, 615),
+    "residence_permit":        (0, 320, 615),
+    # Page 2 (index 1) — Arbeitgeber / Gesundheit
+    "employer_name":           (1, 155, 765),
+    "employer_address":        (1, 155, 735),
+    "date_incapacity_to_work": (1, 155, 705),
+    "onset_of_impairment":     (1, 155, 675),
+    "treating_physician_name": (1, 155, 645),
+    "treating_physician_addr": (1, 155, 615),
+    "treating_physician_phone":(1, 155, 585),
+    "health_insurer":          (1, 155, 555),
 }
 
 
-def wait_and_fill(page, selector, value):
-    try:
-        page.wait_for_selector(selector, timeout=8000)
-        page.fill(selector, value)
-    except Exception:
-        pass
+def create_overlay_page(fields_on_page, page_width, page_height):
+    """Create a transparent PDF page with text overlay at specified coordinates."""
+    packet = io.BytesIO()
+    c = canvas.Canvas(packet, pagesize=(page_width, page_height))
+    c.setFont("Helvetica", 9)
+    c.setFillColorRGB(0, 0, 0.6)  # Dark blue — clearly visible as filled-in data
+
+    for field_name, x, y in fields_on_page:
+        c.drawString(x, y, str(field_name))
+
+    c.save()
+    packet.seek(0)
+    return PdfReader(packet)
 
 
-def wait_and_select(page, selector, label=None, value=None):
-    try:
-        page.wait_for_selector(selector, timeout=8000)
-        if label:
-            page.select_option(selector, label=label)
-        elif value:
-            page.select_option(selector, value=value)
-    except Exception:
-        pass
+def fill_pdf_001001(fields):
+    """Download form 001.001 and overlay filled fields."""
 
+    # Download the PDF with a real browser user agent
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/pdf,*/*"
+    }
 
-def click_next(page):
-    try:
-        page.wait_for_selector("text=Weiter", timeout=10000)
-        page.click("text=Weiter")
-        page.wait_for_timeout(2500)
-    except Exception:
-        pass
+    pdf_url = "https://www.ahv-iv.ch/p/001.001.d"
+    response = requests.get(pdf_url, headers=headers, timeout=30, allow_redirects=True)
 
+    if response.status_code != 200 or b'%PDF' not in response.content[:10]:
+        raise Exception(f"Could not download PDF. Status: {response.status_code}. "
+                        f"Content type: {response.headers.get('Content-Type', 'unknown')}")
 
-def fill_form_001001(page, fields):
-    page.wait_for_timeout(5000)
-    click_next(page)
-    page.wait_for_timeout(3000)
+    # Load the PDF
+    pdf_reader = PdfReader(io.BytesIO(response.content))
+    pdf_writer = PdfWriter()
 
-    # Country
-    wait_and_select(page, SEL["country"],
-                    label=fields.get("country_of_residence", "Schweiz"))
+    # Build field data per page
+    dob = f"{fields.get('date_of_birth_day','')}.{fields.get('date_of_birth_month','')}.{fields.get('date_of_birth_year','')}"
 
-    # Canton
-    wait_and_select(page, SEL["canton"], label=fields.get("city", "Luzern"))
+    page_fields = {
+        0: [
+            (fields.get("last_name", ""),               155, 765),
+            (fields.get("first_name", ""),              320, 765),
+            (dob,                                        155, 735),
+            (fields.get("ahv_number", ""),              320, 735),
+            (fields.get("street", ""),                  155, 705),
+            (fields.get("street_number", ""),           430, 705),
+            (fields.get("postal_code", ""),             155, 675),
+            (fields.get("city", ""),                    280, 675),
+            (fields.get("phone", ""),                   155, 645),
+            (fields.get("email", ""),                   320, 645),
+            (fields.get("nationality", ""),             155, 615),
+            (fields.get("residence_permit", ""),        320, 615),
+            (fields.get("gender", ""),                  155, 585),
+        ],
+        1: [
+            (fields.get("employer_name", ""),           155, 765),
+            (fields.get("employer_address", ""),        155, 735),
+            (fields.get("date_incapacity_to_work", ""), 155, 705),
+            (fields.get("onset_of_impairment", ""),     155, 675),
+            (fields.get("treating_physician_name", ""), 155, 645),
+            (fields.get("treating_physician_address",""),155, 615),
+            (fields.get("treating_physician_phone",""), 155, 585),
+            (fields.get("health_insurer", ""),          155, 555),
+            (fields.get("previously_registered_iv",""), 155, 525),
+        ]
+    }
 
-    # Last name
-    for sel in ["input[id*='pm-lastName']", "input[id*='lastName']",
-                "input[id*='pm-name']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("last_name", ""))
-            break
-        except Exception:
-            pass
+    # Overlay each page
+    for i, page in enumerate(pdf_reader.pages):
+        page_width = float(page.mediabox.width)
+        page_height = float(page.mediabox.height)
 
-    # First name
-    wait_and_fill(page, SEL["firstname"], fields.get("first_name", ""))
-
-    # Gender
-    gender = fields.get("gender", "männlich")
-    try:
-        radios = page.locator("input[type='radio']").all()
-        if gender == "männlich" and len(radios) > 0:
-            radios[0].check()
-        elif len(radios) > 1:
-            radios[1].check()
-    except Exception:
-        pass
-
-    # Date of birth
-    try:
-        dob_selects = page.locator("select[id*='pm-dateOfBirth']").all()
-        if len(dob_selects) >= 3:
-            dob_selects[0].select_option(value=fields.get("date_of_birth_day", "1"))
-            dob_selects[1].select_option(value=fields.get("date_of_birth_month", "1"))
-            dob_selects[2].select_option(value=fields.get("date_of_birth_year", "1980"))
-    except Exception:
-        pass
-
-    # AHV
-    ahv = fields.get("ahv_number", "").replace("756.", "").replace(".", "")
-    for sel in ["input[id*='ahv']", "input[id*='AHV']", "input[id*='avs']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, ahv)
-            break
-        except Exception:
-            pass
-
-    # Street
-    for sel in ["input[id*='street']", "input[id*='strasse']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("street", ""))
-            break
-        except Exception:
-            pass
-
-    # Street number
-    for sel in ["input[id*='streetNumber']", "input[id*='hausnummer']",
-                "input[id*='houseNumber']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("street_number", ""))
-            break
-        except Exception:
-            pass
-
-    # Postal code
-    for sel in ["input[id*='zip']", "input[id*='plz']", "input[id*='postalCode']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("postal_code", ""))
-            break
-        except Exception:
-            pass
-
-    # Phone
-    for sel in ["input[id*='phone']", "input[id*='telefon']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("phone", ""))
-            break
-        except Exception:
-            pass
-
-    # Email
-    for sel in ["input[id*='email']", "input[type='email']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("email", ""))
-            break
-        except Exception:
-            pass
-
-    click_next(page)  # Page 3: Zivilstand
-    click_next(page)  # Page 4: Kinder
-    click_next(page)  # Page 5: Allgemeine Angaben
-
-    page.wait_for_timeout(2000)
-    wait_and_select(page, SEL["nationality"], label=fields.get("nationality", ""))
-    click_next(page)  # Page 6: Bildung/Beruf
-
-    page.wait_for_timeout(2000)
-    for sel in ["input[id*='employer']", "input[id*='arbeitgeber']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("employer_name", ""))
-            break
-        except Exception:
-            pass
-    click_next(page)  # Page 7: Gesundheit
-
-    page.wait_for_timeout(2000)
-    for sel in ["input[id*='physician']", "input[id*='arzt']", "input[id*='doctor']"]:
-        try:
-            page.wait_for_selector(sel, timeout=3000)
-            page.fill(sel, fields.get("treating_physician_name", ""))
-            break
-        except Exception:
-            pass
-    click_next(page)
-
-    for _ in range(5):
-        click_next(page)
-
-    # Page 13: Canton
-    page.wait_for_timeout(2000)
-    for sel in ["select[id*='kanton']", "select[id*='canton']"]:
-        try:
-            page.wait_for_selector(sel, timeout=5000)
-            page.select_option(sel, label="Luzern")
-            break
-        except Exception:
-            pass
-
-
-def run_playwright_job(job_id, form_number, form_url, fields):
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        if i in page_fields:
+            overlay_reader = create_overlay_page(
+                page_fields[i], page_width, page_height
             )
-            page = context.new_page()
-            page.goto(form_url, wait_until="domcontentloaded", timeout=60000)
+            overlay_page = overlay_reader.pages[0]
+            page.merge_page(overlay_page)
 
-            if form_number == "001.001":
-                fill_form_001001(page, fields)
-            else:
-                browser.close()
-                jobs[job_id] = {
-                    "status": "error",
-                    "message": f"Form {form_number} not yet supported."
-                }
-                return
+        pdf_writer.add_page(page)
 
-            screenshot_path = f"/tmp/form_{form_number}_{job_id}.png"
-            page.screenshot(path=screenshot_path, full_page=True)
-            browser.close()
+    # Add metadata
+    pdf_writer.add_metadata({
+        "/Title": "IV Anmeldung 001.001 — Kanton Luzern",
+        "/Author": "IV Form Assistant",
+        "/Subject": f"Ausgefüllt für: {fields.get('last_name','')} {fields.get('first_name','')}",
+    })
+
+    output = io.BytesIO()
+    pdf_writer.write(output)
+    output.seek(0)
+    return output
+
+
+def run_pdf_job(job_id, form_number, fields):
+    try:
+        if form_number == "001.001":
+            pdf_bytes = fill_pdf_001001(fields)
+        else:
+            jobs[job_id] = {
+                "status": "error",
+                "message": f"Form {form_number} not yet supported."
+            }
+            return
+
+        pdf_path = f"/tmp/form_{form_number}_{job_id}.pdf"
+        with open(pdf_path, "wb") as f:
+            f.write(pdf_bytes.getvalue())
 
         jobs[job_id] = {
             "status": "success",
-            "message": f"Form {form_number} filled successfully.",
-            "screenshot_url": f"/screenshot/{job_id}"
+            "message": f"Form {form_number} filled and exported as PDF.",
+            "pdf_url": f"/pdf/{job_id}",
+            "filename": f"IV_Formular_{form_number}_{fields.get('last_name','')}.pdf"
         }
 
     except Exception as e:
@@ -250,18 +188,18 @@ def fill_form():
     form_url = data.get("form_url")
     fields = data.get("fields", {})
 
-    if not form_number or not form_url or not fields:
+    if not form_number or not fields:
         return jsonify({
             "status": "error",
-            "message": "Missing required fields: form_number, form_url, or fields"
+            "message": "Missing required fields: form_number or fields"
         }), 400
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {"status": "processing"}
 
     thread = threading.Thread(
-        target=run_playwright_job,
-        args=(job_id, form_number, form_url, fields),
+        target=run_pdf_job,
+        args=(job_id, form_number, fields),
         daemon=True
     )
     thread.start()
@@ -269,7 +207,7 @@ def fill_form():
     return jsonify({
         "status": "processing",
         "job_id": job_id,
-        "message": "Form filling started. Poll /status/" + job_id + " for result.",
+        "message": "PDF generation started. Poll /status/" + job_id,
         "status_url": f"/status/{job_id}"
     })
 
@@ -282,13 +220,20 @@ def get_status(job_id):
     return jsonify(job)
 
 
-@app.route("/screenshot/<job_id>", methods=["GET"])
-def get_screenshot(job_id):
+@app.route("/pdf/<job_id>", methods=["GET"])
+def get_pdf(job_id):
     for form_number in ["001.001", "001.003"]:
-        path = f"/tmp/form_{form_number}_{job_id}.png"
+        path = f"/tmp/form_{form_number}_{job_id}.pdf"
         if os.path.exists(path):
-            return send_file(path, mimetype="image/png")
-    return jsonify({"status": "error", "message": "Screenshot not found"}), 404
+            job = jobs.get(job_id, {})
+            filename = job.get("filename", f"IV_Formular_{job_id}.pdf")
+            return send_file(
+                path,
+                mimetype="application/pdf",
+                as_attachment=True,
+                download_name=filename
+            )
+    return jsonify({"status": "error", "message": "PDF not found"}), 404
 
 
 @app.route("/health", methods=["GET"])
@@ -296,7 +241,7 @@ def health():
     return jsonify({
         "status": "ok",
         "service": "IV RPA API",
-        "version": "3.1-async-cors",
+        "version": "4.0-pdf-direct",
         "active_jobs": len([j for j in jobs.values() if j.get("status") == "processing"])
     })
 
