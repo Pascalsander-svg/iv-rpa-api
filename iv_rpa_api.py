@@ -26,6 +26,107 @@ jobs = {}
 W, H = A4
 
 
+
+# ============================================================
+# GLOBAL PDF HELPER FUNCTIONS
+# ============================================================
+
+def pdf_header(c, page_num, subtitle=""):
+    c.setFillColor(HexColor('#CC0000'))
+    c.rect(0, H-45, W, 45, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(1.5*cm, H-22, "Anmeldung fuer Erwachsene: Berufliche Integration/Rente")
+    c.setFont("Helvetica", 8)
+    c.drawString(1.5*cm, H-35, "Version 01/26")
+    c.setFont("Helvetica-Bold", 10)
+    c.drawRightString(W-1.5*cm, H-22, "AHV | IV | EO")
+    c.setFont("Helvetica", 7)
+    c.drawRightString(W-1.5*cm, H-35, "Deutsch")
+    c.setFillColor(HexColor('#CC0000'))
+    c.setFont("Helvetica", 7)
+    c.drawRightString(W-1.5*cm, H-48, f"Seite {page_num} von 13")
+    c.setFillColor(colors.black)
+
+def pdf_footer(c, section_name):
+    c.setFillColor(HexColor('#666666'))
+    c.setFont("Helvetica", 7)
+    c.drawString(1.5*cm, 1.2*cm,
+        "WAS IV Luzern | Landenbergstrasse 35, Postfach, 6002 Luzern | Tel. 041 369 05 00")
+    c.drawRightString(W-1.5*cm, 1.2*cm, f"Formular 001.001 | {section_name}")
+    c.setFont("Helvetica", 7)
+    c.drawString(1.5*cm, 0.6*cm, "[ Speichern ]  [ PDF/Drucken ]  [ Online senden ]  [ Schliessen ]")
+
+def pdf_section(c, y, title):
+    c.setFillColor(HexColor('#CC0000'))
+    c.rect(1.5*cm, y-4, W-3*cm, 17, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(1.8*cm, y+1, title)
+    c.setFillColor(colors.black)
+    return y - 22
+
+def pdf_subsection(c, y, title):
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(HexColor('#333333'))
+    c.drawString(1.5*cm, y, title)
+    c.setFillColor(colors.black)
+    c.setStrokeColor(HexColor('#CC0000'))
+    c.setLineWidth(0.5)
+    c.line(1.5*cm, y-2, W-1.5*cm, y-2)
+    c.setLineWidth(1)
+    return y - 14
+
+def pdf_draw(c, y, label, value="", x1=1.5*cm, x2=5*cm, w=12*cm):
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(HexColor('#555555'))
+    c.drawString(x1, y+2, label)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 9)
+    c.setStrokeColor(HexColor('#AAAAAA'))
+    c.line(x2, y, x2+w, y)
+    if value:
+        c.drawString(x2+2, y+2, str(value))
+    return y - 17
+
+def pdf_draw2(c, y, items):
+    for label, value, x1, x2, w in items:
+        c.setFont("Helvetica", 7.5)
+        c.setFillColor(HexColor('#555555'))
+        c.drawString(x1, y+2, label)
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 9)
+        c.setStrokeColor(HexColor('#AAAAAA'))
+        c.line(x2, y, x2+w, y)
+        if value:
+            c.drawString(x2+2, y+2, str(value))
+    return y - 17
+
+def pdf_checkbox(c, y, label, checked=False, x=1.5*cm):
+    c.setStrokeColor(HexColor('#AAAAAA'))
+    c.rect(x, y, 8, 8, fill=0, stroke=1)
+    if checked:
+        c.setFont("Helvetica-Bold", 8)
+        c.setFillColor(HexColor('#CC0000'))
+        c.drawString(x+1, y+1, "X")
+        c.setFillColor(colors.black)
+    c.setFont("Helvetica", 8.5)
+    c.setFillColor(colors.black)
+    c.drawString(x+12, y+1, label)
+    return y - 14
+
+def pdf_radio(c, y, label, checked=False, x=1.5*cm):
+    c.setStrokeColor(HexColor('#AAAAAA'))
+    c.circle(x+4, y+4, 4, fill=0, stroke=1)
+    if checked:
+        c.setFillColor(HexColor('#CC0000'))
+        c.circle(x+4, y+4, 2, fill=1, stroke=0)
+        c.setFillColor(colors.black)
+    c.setFont("Helvetica", 8.5)
+    c.setFillColor(colors.black)
+    c.drawString(x+12, y+1, label)
+    return y - 14
+
 def draw_form_001001_full(fields, output_path):
     c = canvas.Canvas(output_path, pagesize=A4)
     dob = f"{fields.get('date_of_birth_day','')}.{fields.get('date_of_birth_month','')}.{fields.get('date_of_birth_year','')}"
@@ -33,7 +134,7 @@ def draw_form_001001_full(fields, output_path):
     # ============================================================
     # PAGE 1: Informationen
     # ============================================================
-    header(c, 1, "Informationen")
+    pdf_header(c, 1, "Informationen")
     y = H - 65
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(HexColor('#CC0000'))
@@ -79,16 +180,16 @@ def draw_form_001001_full(fields, output_path):
         sy -= 13
     c.setFillColor(colors.black)
 
-    footer(c, "Informationen")
+    pdf_footer(c, "Informationen")
     c.showPage()
 
     # ============================================================
     # PAGE 2: Personalien
     # ============================================================
-    header(c, 2, "1. Personalien")
+    pdf_header(c, 2, "1. Personalien")
     y = H - 65
-    y = section(c, y, "1. Personalien")
-    y = subsection(c, y, "1.1 Persönliche Angaben")
+    y = pdf_section(c, y, "1. Personalien")
+    y = pdf_subsection(c, y, "1.1 Persönliche Angaben")
 
     # Wohnsitz
     c.setFont("Helvetica", 8)
@@ -101,8 +202,8 @@ def draw_form_001001_full(fields, output_path):
     c.drawString(1.8*cm, y-10, fields.get('country_of_residence', 'Schweiz'))
     y -= 28
 
-    y = draw(c, y, "* Name (auch Name als ledige Person)", fields.get('last_name',''), x2=6*cm, w=11*cm)
-    y = draw(c, y, "* Vornamen (alle Vornamen, Rufnamen bitte in Grossbuchstaben)", fields.get('first_name',''), x2=7*cm, w=10*cm)
+    y = pdf_draw(c, y, "* Name (auch Name als ledige Person)", fields.get('last_name',''), x2=6*cm, w=11*cm)
+    y = pdf_draw(c, y, "* Vornamen (alle Vornamen, Rufnamen bitte in Grossbuchstaben)", fields.get('first_name',''), x2=7*cm, w=10*cm)
 
     # Gender radio
     c.setFont("Helvetica", 8)
@@ -111,59 +212,59 @@ def draw_form_001001_full(fields, output_path):
     c.setFillColor(colors.black)
     y -= 12
     gender = fields.get('gender','')
-    y = radio(c, y, "weiblich", gender == 'weiblich', x=2*cm)
-    y = radio(c, y, "männlich", gender == 'männlich', x=2*cm)
+    y = pdf_radio(c, y, "weiblich", gender == 'weiblich', x=2*cm)
+    y = pdf_radio(c, y, "männlich", gender == 'männlich', x=2*cm)
     y -= 3
 
     # DOB and AHV side by side
-    y = draw2(c, y, [
+    y = pdf_draw2(c, y, [
         ("* Geburtsdatum (Tag/Monat/Jahr)", dob, 1.5*cm, 5.5*cm, 4*cm),
         ("* AHV-Nummer (13-stellig)", fields.get('ahv_number',''), 10*cm, 13.5*cm, 4.5*cm),
     ])
     y -= 5
-    y = subsection(c, y, "1.2 Gesetzlicher Wohnsitz mit genauer Adresse")
-    y = draw2(c, y, [
+    y = pdf_subsection(c, y, "1.2 Gesetzlicher Wohnsitz mit genauer Adresse")
+    y = pdf_draw2(c, y, [
         ("* Strasse", fields.get('street',''), 1.5*cm, 3.5*cm, 7*cm),
         ("* Hausnummer", fields.get('street_number',''), 11.5*cm, 14*cm, 3.5*cm),
     ])
-    y = draw2(c, y, [
+    y = pdf_draw2(c, y, [
         ("Postleitzahl, Ort", f"{fields.get('postal_code','')} {fields.get('city','')}", 1.5*cm, 4*cm, 5*cm),
         ("", "", 1.5*cm, 1.5*cm, 0),
     ])
-    y = draw2(c, y, [
+    y = pdf_draw2(c, y, [
         ("* Telefonnummer", fields.get('phone',''), 1.5*cm, 4*cm, 5*cm),
         ("E-Mail", fields.get('email',''), 10*cm, 11.5*cm, 6*cm),
     ])
     y -= 5
-    y = subsection(c, y, "1.3 Beistandschaft")
-    y = radio(c, y, "ja", False, x=2*cm)
-    y = radio(c, y, "nein", True, x=2*cm)
+    y = pdf_subsection(c, y, "1.3 Beistandschaft")
+    y = pdf_radio(c, y, "ja", False, x=2*cm)
+    y = pdf_radio(c, y, "nein", True, x=2*cm)
     y -= 5
-    y = subsection(c, y, "1.4 Staatsangehörigkeit")
+    y = pdf_subsection(c, y, "1.4 Staatsangehörigkeit")
     c.setFont("Helvetica", 8)
     c.setFillColor(HexColor('#555555'))
     c.drawString(1.5*cm, y, "Ausländische Staatsangehörige — Staatsangehörigkeit:")
     c.setFillColor(colors.black)
     y -= 12
-    y = draw2(c, y, [
+    y = pdf_draw2(c, y, [
         ("Staatsangehörigkeit", fields.get('nationality',''), 1.5*cm, 5*cm, 5*cm),
         ("Datum der Einreise in die Schweiz", "", 10.5*cm, 15*cm, 2.5*cm),
     ])
     y -= 5
-    y = subsection(c, y, "1.5 Wer hat das Formular ausgefüllt?")
-    y = radio(c, y, "Die versicherte Person", True, x=2*cm)
-    y = radio(c, y, "Eine Drittperson", False, x=2*cm)
+    y = pdf_subsection(c, y, "1.5 Wer hat das Formular ausgefüllt?")
+    y = pdf_radio(c, y, "Die versicherte Person", True, x=2*cm)
+    y = pdf_radio(c, y, "Eine Drittperson", False, x=2*cm)
 
-    footer(c, "1. Personalien")
+    pdf_footer(c, "1. Personalien")
     c.showPage()
 
     # ============================================================
     # PAGE 3: Zivilstand
     # ============================================================
-    header(c, 3, "2. Zivilstand")
+    pdf_header(c, 3, "2. Zivilstand")
     y = H - 65
-    y = section(c, y, "2. Zivilstand")
-    y = subsection(c, y, "2.1 Aktuelle Situation")
+    y = pdf_section(c, y, "2. Zivilstand")
+    y = pdf_subsection(c, y, "2.1 Aktuelle Situation")
     c.setFont("Helvetica", 8)
     c.setFillColor(HexColor('#555555'))
     c.drawString(1.5*cm, y+2, "* Zivilstand")
@@ -171,23 +272,23 @@ def draw_form_001001_full(fields, output_path):
     y -= 12
     zivilstand = fields.get('civil_status', '')
     for zs in ["ledig", "verheiratet / in eingetragener Partnerschaft", "verwitwet", "geschieden / aufgelöste Partnerschaft"]:
-        y = radio(c, y, zs, zivilstand.lower() in zs.lower(), x=2*cm)
+        y = pdf_radio(c, y, zs, zivilstand.lower() in zs.lower(), x=2*cm)
     y -= 5
-    y = draw(c, y, "Name Ehepartner/in / eingetragene/r Partner/in", fields.get('spouse_name',''), x2=7*cm, w=10*cm)
-    y = draw2(c, y, [
+    y = pdf_draw(c, y, "Name Ehepartner/in / eingetragene/r Partner/in", fields.get('spouse_name',''), x2=7*cm, w=10*cm)
+    y = pdf_draw2(c, y, [
         ("Geburtsdatum", fields.get('spouse_dob',''), 1.5*cm, 4.5*cm, 4*cm),
         ("AHV-Nummer", fields.get('spouse_ahv',''), 9.5*cm, 12*cm, 5.5*cm),
     ])
 
-    footer(c, "2. Zivilstand")
+    pdf_footer(c, "2. Zivilstand")
     c.showPage()
 
     # ============================================================
     # PAGE 4: Kinder
     # ============================================================
-    header(c, 4, "3. Kinder")
+    pdf_header(c, 4, "3. Kinder")
     y = H - 65
-    y = section(c, y, "3. Kinder")
+    y = pdf_section(c, y, "3. Kinder")
     c.setFont("Helvetica", 9)
     c.setFillColor(colors.black)
     c.drawString(1.5*cm, y, "Haben Sie eigene (eheliche und aussereheliche) Kinder, Adoptivkinder, Pflegekinder oder Stiefkinder?")
@@ -198,41 +299,41 @@ def draw_form_001001_full(fields, output_path):
     y -= 16
     c.setFillColor(colors.black)
     has_children = fields.get('has_children', 'nein')
-    y = radio(c, y, "ja", has_children == 'ja', x=2*cm)
-    y = radio(c, y, "nein", has_children != 'ja', x=2*cm)
+    y = pdf_radio(c, y, "ja", has_children == 'ja', x=2*cm)
+    y = pdf_radio(c, y, "nein", has_children != 'ja', x=2*cm)
 
-    footer(c, "3. Kinder")
+    pdf_footer(c, "3. Kinder")
     c.showPage()
 
     # ============================================================
     # PAGE 5: Allgemeine Angaben
     # ============================================================
-    header(c, 5, "4. Allgemeine Angaben")
+    pdf_header(c, 5, "4. Allgemeine Angaben")
     y = H - 65
-    y = section(c, y, "4. Allgemeine Angaben")
-    y = subsection(c, y, "4.1 Wohnsitz und Erwerbstätigkeit")
+    y = pdf_section(c, y, "4. Allgemeine Angaben")
+    y = pdf_subsection(c, y, "4.1 Wohnsitz und Erwerbstätigkeit")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y, "Haben Sie jemals ausserhalb der Schweiz gewohnt?")
     y -= 12
-    y = radio(c, y, "ja", False, x=2*cm)
-    y = radio(c, y, "nein", True, x=2*cm)
+    y = pdf_radio(c, y, "ja", False, x=2*cm)
+    y = pdf_radio(c, y, "nein", True, x=2*cm)
     y -= 10
-    y = subsection(c, y, "4.2 Frühere Anmeldungen")
+    y = pdf_subsection(c, y, "4.2 Frühere Anmeldungen")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y, "Haben Sie bereits einmal eine Anmeldung bei der IV eingereicht?")
     y -= 12
     prev_iv = fields.get('previously_registered_iv', 'Nein')
-    y = radio(c, y, "ja", prev_iv == 'Ja', x=2*cm)
-    y = radio(c, y, "nein", prev_iv != 'Ja', x=2*cm)
+    y = pdf_radio(c, y, "ja", prev_iv == 'Ja', x=2*cm)
+    y = pdf_radio(c, y, "nein", prev_iv != 'Ja', x=2*cm)
     y -= 10
-    y = subsection(c, y, "4.3 Arbeitsunfähigkeit")
-    y = draw2(c, y, [
+    y = pdf_subsection(c, y, "4.3 Arbeitsunfähigkeit")
+    y = pdf_draw2(c, y, [
         ("von (TT.MM.JJ)", fields.get('date_incapacity_to_work',''), 1.5*cm, 4*cm, 4*cm),
         ("bis (TT.MM.JJ)", "", 9.5*cm, 12*cm, 4*cm),
         ("in %", "100", 15*cm, 16.5*cm, 1*cm),
     ])
     y -= 10
-    y = subsection(c, y, "4.4 Versicherungen")
+    y = pdf_subsection(c, y, "4.4 Versicherungen")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y, "Sind Sie angemeldet bzw. erhalten Sie Leistungen einer:")
     y -= 14
@@ -245,23 +346,23 @@ def draw_form_001001_full(fields, output_path):
         ("Arbeitslosenversicherung oder der regionalen Arbeitsvermittlung (RAV)", False),
     ]
     for ins_label, ins_checked in insurances:
-        y = checkbox(c, y, ins_label, ins_checked, x=2*cm)
+        y = pdf_checkbox(c, y, ins_label, ins_checked, x=2*cm)
     y -= 5
-    y = draw(c, y, "Krankenkasse / Versicherung", fields.get('health_insurer',''), x2=5.5*cm, w=11.5*cm)
+    y = pdf_draw(c, y, "Krankenkasse / Versicherung", fields.get('health_insurer',''), x2=5.5*cm, w=11.5*cm)
 
-    footer(c, "4. Allgemeine Angaben")
+    pdf_footer(c, "4. Allgemeine Angaben")
     c.showPage()
 
     # ============================================================
     # PAGE 6: Angaben zu Bildung, Beruf
     # ============================================================
-    header(c, 6, "5. Angaben zu Bildung, Beruf")
+    pdf_header(c, 6, "5. Angaben zu Bildung, Beruf")
     y = H - 65
-    y = section(c, y, "5. Angaben zu Bildung, Beruf und bisheriger Tätigkeit")
-    y = subsection(c, y, "5.1 Muttersprache")
-    y = draw(c, y, "Muttersprache", fields.get('mother_tongue', ''), x2=4*cm, w=13*cm)
+    y = pdf_section(c, y, "5. Angaben zu Bildung, Beruf und bisheriger Tätigkeit")
+    y = pdf_subsection(c, y, "5.1 Muttersprache")
+    y = pdf_draw(c, y, "Muttersprache", fields.get('mother_tongue', ''), x2=4*cm, w=13*cm)
     y -= 5
-    y = subsection(c, y, "5.2 Besuchte Schulen")
+    y = pdf_subsection(c, y, "5.2 Besuchte Schulen")
     c.setStrokeColor(HexColor('#AAAAAA'))
     c.rect(1.5*cm, y-35, W-3*cm, 35, fill=0, stroke=1)
     c.setFont("Helvetica", 8.5)
@@ -269,22 +370,22 @@ def draw_form_001001_full(fields, output_path):
     c.drawString(1.8*cm, y-18, "(Schulen, Ausbildungsorte, Abschlüsse)")
     c.setFillColor(colors.black)
     y -= 45
-    y = subsection(c, y, "5.3 Erlernter Beruf")
-    y = draw(c, y, "Erlernter Beruf / Ausbildung", fields.get('profession',''), x2=5*cm, w=12*cm)
+    y = pdf_subsection(c, y, "5.3 Erlernter Beruf")
+    y = pdf_draw(c, y, "Erlernter Beruf / Ausbildung", fields.get('profession',''), x2=5*cm, w=12*cm)
     y -= 5
-    y = subsection(c, y, "5.4 Erwerbstätige und Personen mit Nebenbeschäftigungen")
-    y = draw(c, y, "Berufsbezeichnung / Funktion", fields.get('job_title',''), x2=5.5*cm, w=11.5*cm)
-    y = draw2(c, y, [
+    y = pdf_subsection(c, y, "5.4 Erwerbstätige und Personen mit Nebenbeschäftigungen")
+    y = pdf_draw(c, y, "Berufsbezeichnung / Funktion", fields.get('job_title',''), x2=5.5*cm, w=11.5*cm)
+    y = pdf_draw2(c, y, [
         ("Name und Adresse des Arbeitgebenden", fields.get('employer_name',''), 1.5*cm, 6*cm, 5*cm),
         ("", fields.get('employer_address',''), 11.5*cm, 11.5*cm, 6*cm),
     ])
-    y = draw2(c, y, [
+    y = pdf_draw2(c, y, [
         ("von (TT.MM.JJ)", "", 1.5*cm, 4*cm, 4*cm),
         ("bis (TT.MM.JJ)", "", 9.5*cm, 12*cm, 4*cm),
         ("Pensum in %", "100", 15*cm, 16.5*cm, 1*cm),
     ])
     y -= 5
-    y = subsection(c, y, "5.5 Nichterwerbstätige")
+    y = pdf_subsection(c, y, "5.5 Nichterwerbstätige")
     c.setFont("Helvetica", 8.5)
     c.setFillColor(HexColor('#555555'))
     c.drawString(1.5*cm, y, "Hauptbeschäftigung (z.B. Haushaltsführung, Studium):")
@@ -294,16 +395,16 @@ def draw_form_001001_full(fields, output_path):
     c.line(1.5*cm, y, W-1.5*cm, y)
     y -= 20
 
-    footer(c, "5. Bildung, Beruf")
+    pdf_footer(c, "5. Bildung, Beruf")
     c.showPage()
 
     # ============================================================
     # PAGE 7: Gesundheitliche Beeinträchtigung
     # ============================================================
-    header(c, 7, "6. Gesundheitliche Beeinträchtigung")
+    pdf_header(c, 7, "6. Gesundheitliche Beeinträchtigung")
     y = H - 65
-    y = section(c, y, "6. Angaben zur gesundheitlichen Beeinträchtigung")
-    y = subsection(c, y, "6.1 Nähere Angaben zur Art der gesundheitlichen Beeinträchtigung")
+    y = pdf_section(c, y, "6. Angaben zur gesundheitlichen Beeinträchtigung")
+    y = pdf_subsection(c, y, "6.1 Nähere Angaben zur Art der gesundheitlichen Beeinträchtigung")
     c.setStrokeColor(HexColor('#AAAAAA'))
     c.rect(1.5*cm, y-50, W-3*cm, 50, fill=0, stroke=1)
     # Fill in diagnosis
@@ -313,58 +414,58 @@ def draw_form_001001_full(fields, output_path):
     if diag_text:
         c.drawString(1.8*cm, y-15, diag_text)
     y -= 60
-    y = draw(c, y, "Seit wann besteht die gesundheitliche Beeinträchtigung?", fields.get('onset_of_impairment',''), x2=8*cm, w=9*cm)
+    y = pdf_draw(c, y, "Seit wann besteht die gesundheitliche Beeinträchtigung?", fields.get('onset_of_impairment',''), x2=8*cm, w=9*cm)
     y -= 5
-    y = subsection(c, y, "6.2 Unfall oder Schadensereignis")
+    y = pdf_subsection(c, y, "6.2 Unfall oder Schadensereignis")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y, "Die gesundheitliche Beeinträchtigung ist ganz oder teilweise zurückzuführen auf:")
     y -= 14
-    y = checkbox(c, y, "einen Unfall (z.B. Strassenverkehr, Ausübung beruflicher oder sportlicher Aktivität)", False, x=2*cm)
-    y = checkbox(c, y, "ein anderes Schadensereignis (z.B. ärztliche Sorgfaltspflichtverletzung, Infekt)", False, x=2*cm)
-    y = checkbox(c, y, "eine Krankheit", True, x=2*cm)
+    y = pdf_checkbox(c, y, "einen Unfall (z.B. Strassenverkehr, Ausübung beruflicher oder sportlicher Aktivität)", False, x=2*cm)
+    y = pdf_checkbox(c, y, "ein anderes Schadensereignis (z.B. ärztliche Sorgfaltspflichtverletzung, Infekt)", False, x=2*cm)
+    y = pdf_checkbox(c, y, "eine Krankheit", True, x=2*cm)
     y -= 5
-    y = subsection(c, y, "6.3 Arzt, Spital oder Pflegeheim")
+    y = pdf_subsection(c, y, "6.3 Arzt, Spital oder Pflegeheim")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y, "Bitte geben Sie uns hier Ihren Hausarzt sowie weitere behandelnde Ärzte, Spitäler oder Pflegeheime an:")
     y -= 14
-    y = draw(c, y, "Name und Adresse", fields.get('treating_physician_name','') + ', ' + fields.get('treating_physician_address',''), x2=4.5*cm, w=13*cm)
-    y = draw2(c, y, [
+    y = pdf_draw(c, y, "Name und Adresse", fields.get('treating_physician_name','') + ', ' + fields.get('treating_physician_address',''), x2=4.5*cm, w=13*cm)
+    y = pdf_draw2(c, y, [
         ("Fachrichtung", fields.get('specialty', 'Allgemeine Innere Medizin'), 1.5*cm, 4*cm, 5*cm),
         ("Telefon", fields.get('treating_physician_phone',''), 10*cm, 11.5*cm, 6*cm),
     ])
-    y = draw2(c, y, [
+    y = pdf_draw2(c, y, [
         ("In Behandlung von (TT.MM.JJ)", fields.get('date_incapacity_to_work',''), 1.5*cm, 5.5*cm, 4*cm),
         ("In Behandlung bis", "", 10*cm, 13.5*cm, 4*cm),
     ])
 
-    footer(c, "6. Gesundheit")
+    pdf_footer(c, "6. Gesundheit")
     c.showPage()
 
     # ============================================================
     # PAGE 8: Zahlungsverbindung
     # ============================================================
-    header(c, 8, "7. Zahlungsverbindung")
+    pdf_header(c, 8, "7. Zahlungsverbindung")
     y = H - 65
-    y = section(c, y, "7. Zahlungsverbindung")
+    y = pdf_section(c, y, "7. Zahlungsverbindung")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y, "Bitte geben Sie Ihre Bankverbindung für allfällige Zahlungen der IV an:")
     y -= 16
-    y = radio(c, y, "Bankkonto", True, x=2*cm)
-    y = radio(c, y, "Postkonto", False, x=2*cm)
+    y = pdf_radio(c, y, "Bankkonto", True, x=2*cm)
+    y = pdf_radio(c, y, "Postkonto", False, x=2*cm)
     y -= 5
-    y = draw(c, y, "lautend auf (Name/Vorname)", fields.get('bank_account_holder', f"{fields.get('last_name','')} {fields.get('first_name','')}"), x2=5*cm, w=12*cm)
-    y = draw(c, y, "* IBAN", fields.get('iban',''), x2=3*cm, w=14*cm)
-    y = draw(c, y, "Name und Adresse der Bank", fields.get('bank_name',''), x2=5*cm, w=12*cm)
+    y = pdf_draw(c, y, "lautend auf (Name/Vorname)", fields.get('bank_account_holder', f"{fields.get('last_name','')} {fields.get('first_name','')}"), x2=5*cm, w=12*cm)
+    y = pdf_draw(c, y, "* IBAN", fields.get('iban',''), x2=3*cm, w=14*cm)
+    y = pdf_draw(c, y, "Name und Adresse der Bank", fields.get('bank_name',''), x2=5*cm, w=12*cm)
 
-    footer(c, "7. Zahlungsverbindung")
+    pdf_footer(c, "7. Zahlungsverbindung")
     c.showPage()
 
     # ============================================================
     # PAGE 9: Ermächtigung
     # ============================================================
-    header(c, 9, "Ermächtigung zur Erteilung von Auskünften")
+    pdf_header(c, 9, "Ermächtigung zur Erteilung von Auskünften")
     y = H - 65
-    y = section(c, y, "Ermächtigung zur Erteilung von Auskünften")
+    y = pdf_section(c, y, "Ermächtigung zur Erteilung von Auskünften")
     c.setFont("Helvetica", 8.5)
     text = ("Ich ermächtige alle Ärzte, Spitäler, Versicherungen, Arbeitgeber und Behörden, "
             "der IV-Stelle alle für die Abklärung meines Anspruchs notwendigen Auskünfte zu erteilen.")
@@ -372,21 +473,21 @@ def draw_form_001001_full(fields, output_path):
     y -= 12
     c.drawString(1.5*cm, y, text[80:])
     y -= 25
-    y = draw(c, y, "Unterschrift", "", x2=4*cm, w=10*cm)
-    y = draw2(c, y, [
+    y = pdf_draw(c, y, "Unterschrift", "", x2=4*cm, w=10*cm)
+    y = pdf_draw2(c, y, [
         ("Ort", fields.get('city',''), 1.5*cm, 2.5*cm, 4*cm),
         ("Datum", fields.get('date_created',''), 7*cm, 8.5*cm, 5*cm),
     ])
 
-    footer(c, "Ermächtigung")
+    pdf_footer(c, "Ermächtigung")
     c.showPage()
 
     # ============================================================
     # PAGE 10: Mitwirkungspflicht
     # ============================================================
-    header(c, 10, "Mitwirkungspflicht")
+    pdf_header(c, 10, "Mitwirkungspflicht")
     y = H - 65
-    y = section(c, y, "Mitwirkungspflicht")
+    y = pdf_section(c, y, "Mitwirkungspflicht")
     c.setFont("Helvetica", 8.5)
     lines = [
         "Die versicherte Person ist verpflichtet, an der Abklärung aktiv mitzuwirken.",
@@ -402,15 +503,15 @@ def draw_form_001001_full(fields, output_path):
         c.drawString(1.5*cm, y, line)
         y -= 12
 
-    footer(c, "Mitwirkungspflicht")
+    pdf_footer(c, "Mitwirkungspflicht")
     c.showPage()
 
     # ============================================================
     # PAGE 11: Wahrheitsgetreue Angaben
     # ============================================================
-    header(c, 11, "Wahrheitsgetreue und vollständige Angaben")
+    pdf_header(c, 11, "Wahrheitsgetreue und vollständige Angaben")
     y = H - 65
-    y = section(c, y, "Wahrheitsgetreue und vollständige Angaben")
+    y = pdf_section(c, y, "Wahrheitsgetreue und vollständige Angaben")
     c.setFont("Helvetica", 8.5)
     lines = [
         "Ich bestätige, dass die gemachten Angaben wahrheitsgetreu und vollständig sind.",
@@ -423,27 +524,27 @@ def draw_form_001001_full(fields, output_path):
         c.drawString(1.5*cm, y, line)
         y -= 12
     y -= 20
-    y = draw(c, y, "Unterschrift der versicherten Person", "", x2=7*cm, w=10*cm)
-    y = draw2(c, y, [
+    y = pdf_draw(c, y, "Unterschrift der versicherten Person", "", x2=7*cm, w=10*cm)
+    y = pdf_draw2(c, y, [
         ("Ort", fields.get('city',''), 1.5*cm, 2.5*cm, 4*cm),
         ("Datum", fields.get('date_created',''), 7*cm, 8.5*cm, 5*cm),
     ])
 
-    footer(c, "Wahrheitsgetreue Angaben")
+    pdf_footer(c, "Wahrheitsgetreue Angaben")
     c.showPage()
 
     # ============================================================
     # PAGE 12: Beilagen
     # ============================================================
-    header(c, 12, "Beilagen")
+    pdf_header(c, 12, "Beilagen")
     y = H - 65
-    y = section(c, y, "Beilagen")
+    y = pdf_section(c, y, "Beilagen")
     c.setFont("Helvetica", 8.5)
     c.drawString(1.5*cm, y,
         "Untenstehend sind alle Dokumente aufgeführt, welche Sie einreichen können.")
     y -= 20
 
-    y = subsection(c, y, "Pflichtbeilagen zum Formular")
+    y = pdf_subsection(c, y, "Pflichtbeilagen zum Formular")
     required = [
         ("Kopie eines amtlichen Personalausweises (z.B. Familienausweis, Ausländerausweis)", True),
         ("Arztbericht der behandelnden Ärztin / des behandelnden Arztes", True),
@@ -451,10 +552,10 @@ def draw_form_001001_full(fields, output_path):
         ("Krankenversicherungsnachweis (Versicherungsausweis)", True),
     ]
     for label, checked in required:
-        y = checkbox(c, y, label, checked, x=2*cm)
+        y = pdf_checkbox(c, y, label, checked, x=2*cm)
     y -= 10
 
-    y = subsection(c, y, "Optionale Beilagen")
+    y = pdf_subsection(c, y, "Optionale Beilagen")
     optional = [
         "Kopie Ausbildungsabschlüsse und Belege von Lehrbetrieben, Hochschulen und Arbeitgebenden",
         "Kopie der Ernennungsurkunde Beistandschaft/Vormund",
@@ -463,22 +564,22 @@ def draw_form_001001_full(fields, output_path):
         "Andere",
     ]
     for label in optional:
-        y = checkbox(c, y, label, False, x=2*cm)
+        y = pdf_checkbox(c, y, label, False, x=2*cm)
 
     c.setFillColor(HexColor('#CC0000'))
     c.setFont("Helvetica-Bold", 8)
     c.drawString(1.5*cm, y-5, "Die Kopie eines amtlichen Personalausweises ist obligatorisch.")
     c.setFillColor(colors.black)
 
-    footer(c, "Beilagen")
+    pdf_footer(c, "Beilagen")
     c.showPage()
 
     # ============================================================
     # PAGE 13: Empfängerauswahl
     # ============================================================
-    header(c, 13, "Empfängerauswahl")
+    pdf_header(c, 13, "Empfängerauswahl")
     y = H - 65
-    y = section(c, y, "Empfängerauswahl")
+    y = pdf_section(c, y, "Empfängerauswahl")
     c.setFont("Helvetica", 9)
     c.drawString(1.5*cm, y, "* Bitte wählen Sie die IV-Stelle Ihres Wohnkantons:")
     y -= 20
@@ -520,7 +621,7 @@ def draw_form_001001_full(fields, output_path):
         c.drawString(2*cm, sy, s)
         sy -= 12
 
-    footer(c, "Empfängerauswahl")
+    pdf_footer(c, "Empfängerauswahl")
     c.showPage()
 
     c.save()
