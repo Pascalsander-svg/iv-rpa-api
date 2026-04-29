@@ -1,3 +1,5 @@
 flask
-playwright
 flask-cors
+reportlab
+pypdf
+requests
