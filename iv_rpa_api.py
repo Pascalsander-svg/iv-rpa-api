@@ -866,3 +866,99 @@ def draw_form_002003(fields, output_path):
 
     c.showPage()
     c.save()
+
+
+# ============================================================
+# JOB RUNNER
+# ============================================================
+
+def run_pdf_job(job_id, form_number, fields):
+    try:
+        from datetime import date
+        fields['date_created'] = date.today().strftime("%d.%m.%Y")
+        pdf_path = f"/tmp/form_{form_number}_{job_id}.pdf"
+
+        if form_number == "001.001":
+            draw_form_001001_full(fields, pdf_path)
+        elif form_number == "001.003":
+            draw_form_001003(fields, pdf_path)
+        elif form_number == "002.003":
+            draw_form_002003(fields, pdf_path)
+        else:
+            jobs[job_id] = {"status": "error", "message": f"Form {form_number} not yet supported."}
+            return
+
+        jobs[job_id] = {
+            "status": "success",
+            "message": f"Form {form_number} filled and exported as PDF.",
+            "pdf_url": f"/pdf/{job_id}",
+            "filename": f"IV_Formular_{form_number}_{fields.get('last_name','')}.pdf"
+        }
+    except Exception as e:
+        import traceback
+        jobs[job_id] = {"status": "error", "message": str(e), "detail": traceback.format_exc()}
+
+
+# ============================================================
+# FLASK ROUTES
+# ============================================================
+
+@app.route("/fill-form", methods=["POST"])
+def fill_form():
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "No JSON body received"}), 400
+    form_number = data.get("form_number")
+    fields = data.get("fields", {})
+    if not form_number or not fields:
+        return jsonify({"status": "error", "message": "Missing form_number or fields"}), 400
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {"status": "processing"}
+    thread = threading.Thread(target=run_pdf_job, args=(job_id, form_number, fields), daemon=True)
+    thread.start()
+    return jsonify({
+        "status": "processing",
+        "job_id": job_id,
+        "message": "PDF generation started. Poll /status/" + job_id,
+        "status_url": f"/status/{job_id}"
+    })
+
+
+@app.route("/status/<job_id>", methods=["GET"])
+def get_status(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"status": "error", "message": "Job not found"}), 404
+    return jsonify(job)
+
+
+@app.route("/pdf/<job_id>", methods=["GET"])
+def get_pdf(job_id):
+    for form_number in ["001.001", "001.003", "002.003"]:
+        path = f"/tmp/form_{form_number}_{job_id}.pdf"
+        if os.path.exists(path):
+            job = jobs.get(job_id, {})
+            filename = job.get("filename", f"IV_Formular_{job_id}.pdf")
+            return send_file(path, mimetype="application/pdf",
+                             as_attachment=True, download_name=filename)
+    return jsonify({"status": "error", "message": "PDF not found"}), 404
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "IV RPA API",
+        "version": "6.0-full-form",
+        "active_jobs": len([j for j in jobs.values() if j.get("status") == "processing"])
+    })
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+port = int(os.environ.get("PORT", 10000))
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=port, debug=False)
