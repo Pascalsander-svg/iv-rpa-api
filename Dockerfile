@@ -1,12 +1,10 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
-    wget curl gnupg \
+    wget curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install flask playwright flask-cors
-
-RUN playwright install chromium --with-deps
+RUN pip install flask flask-cors reportlab pypdf requests
 
 WORKDIR /app
 COPY iv_rpa_api.py .
