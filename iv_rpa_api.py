@@ -1,8 +1,9 @@
 """
-IV Form RPA API — Version 4.0 PDF Direct Fill
------------------------------------------------
-Downloads the official BSV PDF, overlays filled fields using reportlab,
-and returns a ready-to-print PDF. No browser automation needed.
+IV Form RPA API — Version 5.0 PDF Generator
+---------------------------------------------
+Generates filled IV form 001.001 as PDF using reportlab.
+No browser automation. No external downloads.
+Returns PDF via /pdf/<job_id>.
 """
 
 from flask import Flask, request, jsonify, send_file
@@ -10,8 +11,8 @@ from flask_cors import CORS
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from pypdf import PdfReader, PdfWriter
-import requests
+from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
 import traceback
 import os
 import uuid
@@ -22,145 +23,188 @@ app = Flask(__name__)
 CORS(app)
 
 jobs = {}
-
-# Field coordinates for Form 001.001 (x, y, page_index)
-# Coordinates are in points (72 pts = 1 inch) from bottom-left
-# Page size A4: 595 x 842 pts
-# These are approximate — adjust after first test print
-FIELD_COORDS_001001 = {
-    # Page 1 (index 0) — Personalien
-    "last_name":               (0, 155, 765),
-    "first_name":              (0, 320, 765),
-    "date_of_birth":           (0, 155, 735),
-    "ahv_number":              (0, 320, 735),
-    "street":                  (0, 155, 705),
-    "street_number":           (0, 430, 705),
-    "postal_code":             (0, 155, 675),
-    "city":                    (0, 280, 675),
-    "phone":                   (0, 155, 645),
-    "email":                   (0, 320, 645),
-    "nationality":             (0, 155, 615),
-    "residence_permit":        (0, 320, 615),
-    # Page 2 (index 1) — Arbeitgeber / Gesundheit
-    "employer_name":           (1, 155, 765),
-    "employer_address":        (1, 155, 735),
-    "date_incapacity_to_work": (1, 155, 705),
-    "onset_of_impairment":     (1, 155, 675),
-    "treating_physician_name": (1, 155, 645),
-    "treating_physician_addr": (1, 155, 615),
-    "treating_physician_phone":(1, 155, 585),
-    "health_insurer":          (1, 155, 555),
-}
+W, H = A4
 
 
-def create_overlay_page(fields_on_page, page_width, page_height):
-    """Create a transparent PDF page with text overlay at specified coordinates."""
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=(page_width, page_height))
-    c.setFont("Helvetica", 9)
-    c.setFillColorRGB(0, 0, 0.6)  # Dark blue — clearly visible as filled-in data
+def draw_form_001001(fields, output_path):
+    c = canvas.Canvas(output_path, pagesize=A4)
 
-    for field_name, x, y in fields_on_page:
-        c.drawString(x, y, str(field_name))
+    def header():
+        c.setFillColor(HexColor('#CC0000'))
+        c.rect(0, H-50, W, 50, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(2*cm, H-32, "AHV | IV | EO")
+        c.setFont("Helvetica", 10)
+        c.drawString(12*cm, H-32, "Schweizerische Eidgenossenschaft")
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(2*cm, H-75, "Anmeldung für Erwachsene: Berufliche Integration / Rente")
+        c.setFont("Helvetica", 9)
+        c.drawString(2*cm, H-90, "Formular 001.001 | Kanton Luzern")
+        c.setFont("Helvetica", 8)
+        c.drawString(14*cm, H-90, f"Erstellt: {fields.get('date_created','')}")
 
-    c.save()
-    packet.seek(0)
-    return PdfReader(packet)
+    def section(y, title):
+        c.setFillColor(HexColor('#E8E8E8'))
+        c.rect(1.5*cm, y-5, W-3*cm, 18, fill=1, stroke=0)
+        c.setFillColor(HexColor('#CC0000'))
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(1.8*cm, y+1, title)
+        c.setFillColor(colors.black)
+        return y - 25
 
+    def field(y, label, value, x1=1.5*cm, x2=5*cm, w=12*cm):
+        c.setFont("Helvetica", 8)
+        c.setFillColor(HexColor('#666666'))
+        c.drawString(x1, y+2, label)
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 9)
+        c.setStrokeColor(HexColor('#AAAAAA'))
+        c.line(x2, y, x2+w, y)
+        c.drawString(x2+2, y+2, str(value) if value else "")
+        return y - 18
 
-def fill_pdf_001001(fields):
-    """Download form 001.001 and overlay filled fields."""
+    def field2(y, items):
+        for label, value, x1, x2, w in items:
+            c.setFont("Helvetica", 8)
+            c.setFillColor(HexColor('#666666'))
+            c.drawString(x1, y+2, label)
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica", 9)
+            c.setStrokeColor(HexColor('#AAAAAA'))
+            c.line(x2, y, x2+w, y)
+            c.drawString(x2+2, y+2, str(value) if value else "")
+        return y - 18
 
-    # Download the PDF with a real browser user agent
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/pdf,*/*"
-    }
+    header()
+    y = H - 110
 
-    pdf_url = "https://www.ahv-iv.ch/p/001.001.d"
-    response = requests.get(pdf_url, headers=headers, timeout=30, allow_redirects=True)
+    c.setFont("Helvetica", 8)
+    c.setFillColor(HexColor('#666666'))
+    c.drawString(1.5*cm, y, "Einzureichen bei:")
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(5*cm, y, "WAS IV Luzern, Landenbergstrasse 35, Postfach, 6002 Luzern")
+    y -= 8
+    c.setFont("Helvetica", 8)
+    c.setFillColor(HexColor('#666666'))
+    c.drawString(5*cm, y, "Tel. 041 369 05 00 | www.was-luzern.ch/kontaktformular-iv-sachleistungen")
+    y -= 20
+    c.setStrokeColor(HexColor('#CCCCCC'))
+    c.line(1.5*cm, y, W-1.5*cm, y)
+    y -= 15
 
-    if response.status_code != 200 or b'%PDF' not in response.content[:10]:
-        raise Exception(f"Could not download PDF. Status: {response.status_code}. "
-                        f"Content type: {response.headers.get('Content-Type', 'unknown')}")
-
-    # Load the PDF
-    pdf_reader = PdfReader(io.BytesIO(response.content))
-    pdf_writer = PdfWriter()
-
-    # Build field data per page
+    y = section(y, "1. Personalien der versicherten Person")
     dob = f"{fields.get('date_of_birth_day','')}.{fields.get('date_of_birth_month','')}.{fields.get('date_of_birth_year','')}"
+    y = field2(y, [
+        ("Name", fields.get('last_name',''), 1.5*cm, 3.5*cm, 5.5*cm),
+        ("Vorname", fields.get('first_name',''), 9.5*cm, 11.5*cm, 6*cm),
+    ])
+    y = field2(y, [
+        ("Geburtsdatum", dob, 1.5*cm, 4.5*cm, 4*cm),
+        ("AHV-Nummer", fields.get('ahv_number',''), 9.5*cm, 12*cm, 5.5*cm),
+    ])
+    y = field2(y, [
+        ("Geschlecht", fields.get('gender',''), 1.5*cm, 3.8*cm, 4*cm),
+        ("Nationalität", fields.get('nationality',''), 9.5*cm, 12*cm, 5.5*cm),
+    ])
+    y = field(y, "Ausländerausweis-Typ", fields.get('residence_permit',''), x2=5*cm, w=6*cm)
+    y -= 5
 
-    page_fields = {
-        0: [
-            (fields.get("last_name", ""),               155, 765),
-            (fields.get("first_name", ""),              320, 765),
-            (dob,                                        155, 735),
-            (fields.get("ahv_number", ""),              320, 735),
-            (fields.get("street", ""),                  155, 705),
-            (fields.get("street_number", ""),           430, 705),
-            (fields.get("postal_code", ""),             155, 675),
-            (fields.get("city", ""),                    280, 675),
-            (fields.get("phone", ""),                   155, 645),
-            (fields.get("email", ""),                   320, 645),
-            (fields.get("nationality", ""),             155, 615),
-            (fields.get("residence_permit", ""),        320, 615),
-            (fields.get("gender", ""),                  155, 585),
-        ],
-        1: [
-            (fields.get("employer_name", ""),           155, 765),
-            (fields.get("employer_address", ""),        155, 735),
-            (fields.get("date_incapacity_to_work", ""), 155, 705),
-            (fields.get("onset_of_impairment", ""),     155, 675),
-            (fields.get("treating_physician_name", ""), 155, 645),
-            (fields.get("treating_physician_address",""),155, 615),
-            (fields.get("treating_physician_phone",""), 155, 585),
-            (fields.get("health_insurer", ""),          155, 555),
-            (fields.get("previously_registered_iv",""), 155, 525),
-        ]
-    }
+    y = section(y, "2. Wohnadresse")
+    y = field(y, "Strasse / Nr.", f"{fields.get('street','')} {fields.get('street_number','')}", x2=4.5*cm, w=13*cm)
+    y = field2(y, [
+        ("PLZ", fields.get('postal_code',''), 1.5*cm, 2.8*cm, 2*cm),
+        ("Ort", fields.get('city',''), 5.5*cm, 6.5*cm, 5*cm),
+    ])
+    y = field2(y, [
+        ("Telefon", fields.get('phone',''), 1.5*cm, 3.5*cm, 4.5*cm),
+        ("E-Mail", fields.get('email',''), 9*cm, 10.5*cm, 7*cm),
+    ])
+    y -= 5
 
-    # Overlay each page
-    for i, page in enumerate(pdf_reader.pages):
-        page_width = float(page.mediabox.width)
-        page_height = float(page.mediabox.height)
+    y = section(y, "3. Arbeitgeber")
+    y = field(y, "Name Arbeitgeber", fields.get('employer_name',''), x2=5*cm, w=12*cm)
+    y = field(y, "Adresse Arbeitgeber", fields.get('employer_address',''), x2=5*cm, w=12*cm)
+    y = field(y, "Arbeitsunfähig seit", fields.get('date_incapacity_to_work',''), x2=5*cm, w=6*cm)
+    y -= 5
 
-        if i in page_fields:
-            overlay_reader = create_overlay_page(
-                page_fields[i], page_width, page_height
-            )
-            overlay_page = overlay_reader.pages[0]
-            page.merge_page(overlay_page)
+    y = section(y, "4. Gesundheitliche Situation")
+    y = field(y, "Beginn der Beeinträchtigung", fields.get('onset_of_impairment',''), x2=6.5*cm, w=10.5*cm)
+    y = field(y, "Behandelnde Ärztin / Arzt", fields.get('treating_physician_name',''), x2=6.5*cm, w=10.5*cm)
+    y = field(y, "Adresse Arzt/Ärztin", fields.get('treating_physician_address',''), x2=6.5*cm, w=10.5*cm)
+    y = field(y, "Telefon Arzt/Ärztin", fields.get('treating_physician_phone',''), x2=6.5*cm, w=6*cm)
+    y -= 5
 
-        pdf_writer.add_page(page)
+    y = section(y, "5. Versicherungsangaben")
+    y = field(y, "Krankenkasse", fields.get('health_insurer',''), x2=4.5*cm, w=12.5*cm)
+    y = field(y, "Bereits IV-angemeldet?", fields.get('previously_registered_iv',''), x2=6*cm, w=3*cm)
+    y -= 15
 
-    # Add metadata
-    pdf_writer.add_metadata({
-        "/Title": "IV Anmeldung 001.001 — Kanton Luzern",
-        "/Author": "IV Form Assistant",
-        "/Subject": f"Ausgefüllt für: {fields.get('last_name','')} {fields.get('first_name','')}",
-    })
+    c.setStrokeColor(HexColor('#CCCCCC'))
+    c.line(1.5*cm, y, W-1.5*cm, y)
+    y -= 20
 
-    output = io.BytesIO()
-    pdf_writer.write(output)
-    output.seek(0)
-    return output
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(colors.black)
+    c.drawString(1.5*cm, y, "Unterschrift:")
+    c.setStrokeColor(HexColor('#AAAAAA'))
+    c.line(4.5*cm, y, 13*cm, y)
+    c.setFont("Helvetica", 8)
+    c.setFillColor(HexColor('#666666'))
+    c.drawString(1.5*cm, y-12, "Ort, Datum:")
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 9)
+    c.drawString(4.5*cm, y-12, f"{fields.get('city','')}, {fields.get('date_created','')}")
+    y -= 30
+
+    # Attachments box
+    c.setStrokeColor(HexColor('#CC0000'))
+    c.setLineWidth(0.5)
+    box_h = 65
+    c.rect(1.5*cm, y-box_h, W-3*cm, box_h+10, fill=0, stroke=1)
+    c.setFillColor(HexColor('#CC0000'))
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(2*cm, y, "Beizulegende Unterlagen:")
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 8)
+    ay = y - 13
+    for att in [
+        "• Kopie amtlicher Ausweis (Pass oder Identitätskarte)",
+        "• Arztbericht der behandelnden Ärztin / des behandelnden Arztes",
+        "• Aktuelles Arbeitsunfähigkeitszeugnis (AU-Zeugnis)",
+        "• Krankenversicherungsnachweis",
+    ]:
+        c.drawString(2*cm, ay, att)
+        ay -= 12
+
+    # Footer
+    c.setFillColor(HexColor('#666666'))
+    c.setFont("Helvetica", 7)
+    c.drawString(1.5*cm, 1.5*cm,
+        "WAS IV Luzern | Landenbergstrasse 35, Postfach, 6002 Luzern | Tel. 041 369 05 00")
+    c.drawRightString(W-1.5*cm, 1.5*cm, "Formular 001.001 | Version 01/26")
+
+    c.showPage()
+    c.save()
 
 
 def run_pdf_job(job_id, form_number, fields):
     try:
+        from datetime import date
+        fields['date_created'] = date.today().strftime("%d.%m.%Y")
+
+        pdf_path = f"/tmp/form_{form_number}_{job_id}.pdf"
+
         if form_number == "001.001":
-            pdf_bytes = fill_pdf_001001(fields)
+            draw_form_001001(fields, pdf_path)
         else:
             jobs[job_id] = {
                 "status": "error",
                 "message": f"Form {form_number} not yet supported."
             }
             return
-
-        pdf_path = f"/tmp/form_{form_number}_{job_id}.pdf"
-        with open(pdf_path, "wb") as f:
-            f.write(pdf_bytes.getvalue())
 
         jobs[job_id] = {
             "status": "success",
@@ -180,19 +224,14 @@ def run_pdf_job(job_id, form_number, fields):
 @app.route("/fill-form", methods=["POST"])
 def fill_form():
     data = request.get_json()
-
     if not data:
         return jsonify({"status": "error", "message": "No JSON body received"}), 400
 
     form_number = data.get("form_number")
-    form_url = data.get("form_url")
     fields = data.get("fields", {})
 
     if not form_number or not fields:
-        return jsonify({
-            "status": "error",
-            "message": "Missing required fields: form_number or fields"
-        }), 400
+        return jsonify({"status": "error", "message": "Missing form_number or fields"}), 400
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {"status": "processing"}
@@ -227,12 +266,8 @@ def get_pdf(job_id):
         if os.path.exists(path):
             job = jobs.get(job_id, {})
             filename = job.get("filename", f"IV_Formular_{job_id}.pdf")
-            return send_file(
-                path,
-                mimetype="application/pdf",
-                as_attachment=True,
-                download_name=filename
-            )
+            return send_file(path, mimetype="application/pdf",
+                             as_attachment=True, download_name=filename)
     return jsonify({"status": "error", "message": "PDF not found"}), 404
 
 
@@ -241,7 +276,7 @@ def health():
     return jsonify({
         "status": "ok",
         "service": "IV RPA API",
-        "version": "4.0-pdf-direct",
+        "version": "5.0-pdf-generator",
         "active_jobs": len([j for j in jobs.values() if j.get("status") == "processing"])
     })
 
