@@ -627,180 +627,565 @@ def draw_form_001001_full(fields, output_path):
     c.save()
 
 
-def draw_form_001003(fields, output_path):
-    """Form 001.003 — Registration Minors"""
+
+def draw_form_001003_full(fields, output_path):
     c = canvas.Canvas(output_path, pagesize=A4)
+    dob_child = f"{fields.get('date_of_birth_day','')}.{fields.get('date_of_birth_month','')}.{fields.get('date_of_birth_year','')}"
 
-    def header():
-        c.setFillColor(HexColor('#CC0000'))
-        c.rect(0, H-50, W, 50, fill=1, stroke=0)
-        c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(2*cm, H-32, "AHV | IV | EO")
-        c.setFont("Helvetica", 10)
-        c.drawString(12*cm, H-32, "Schweizerische Eidgenossenschaft")
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica-Bold", 13)
-        c.drawString(2*cm, H-75, "Anmeldung Minderjährige: Med. Massnahmen / Hilfsmittel")
-        c.setFont("Helvetica", 9)
-        c.drawString(2*cm, H-90, "Formular 001.003 | Kanton Luzern")
-        c.setFont("Helvetica", 8)
-        c.drawString(14*cm, H-90, f"Erstellt: {fields.get('date_created','')}")
-
-    def section(y, title):
-        c.setFillColor(HexColor('#E8E8E8'))
-        c.rect(1.5*cm, y-5, W-3*cm, 18, fill=1, stroke=0)
-        c.setFillColor(HexColor('#CC0000'))
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(1.8*cm, y+1, title)
-        c.setFillColor(colors.black)
-        return y - 25
-
-    def field(y, label, value, x1=1.5*cm, x2=5*cm, w=12*cm):
-        c.setFont("Helvetica", 8)
-        c.setFillColor(HexColor('#666666'))
-        c.drawString(x1, y+2, label)
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica", 9)
-        c.setStrokeColor(HexColor('#AAAAAA'))
-        c.line(x2, y, x2+w, y)
-        c.drawString(x2+2, y+2, str(value) if value else "")
-        return y - 18
-
-    def field2(y, items):
-        for label, value, x1, x2, w in items:
-            c.setFont("Helvetica", 8)
-            c.setFillColor(HexColor('#666666'))
-            c.drawString(x1, y+2, label)
-            c.setFillColor(colors.black)
-            c.setFont("Helvetica", 9)
-            c.setStrokeColor(HexColor('#AAAAAA'))
-            c.line(x2, y, x2+w, y)
-            c.drawString(x2+2, y+2, str(value) if value else "")
-        return y - 18
-
-    header()
-    y = H - 110
-
-    c.setFont("Helvetica", 8)
-    c.setFillColor(HexColor('#666666'))
-    c.drawString(1.5*cm, y, "Einzureichen bei:")
+    # ── PAGE 1: Informationen ──────────────────────────────
+    hdr(c, 1)
+    y = H - 65
+    c.setFillColor(RED)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(1.5*cm, y, "Informationen")
     c.setFillColor(colors.black)
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(5*cm, y, "WAS IV Luzern, Landenbergstrasse 35, Postfach, 6002 Luzern")
-    y -= 8
-    c.setFont("Helvetica", 8)
-    c.setFillColor(HexColor('#666666'))
-    c.drawString(5*cm, y, "Tel. 041 369 05 00 | www.was-luzern.ch")
     y -= 20
-    c.setStrokeColor(HexColor('#CCCCCC'))
-    c.line(1.5*cm, y, W-1.5*cm, y)
-    y -= 15
+    c.setFont("Helvetica", 9)
+    for line in [
+        "Wir möchten Ihre Anmeldung möglichst rasch bearbeiten. Mit korrekten und",
+        "vollständigen Angaben helfen Sie uns, Rückfragen zu vermeiden.",
+        "",
+        "Sie können das Formular direkt online einreichen, wenn Sie es vollständig",
+        "ausgefüllt haben. Sie erhalten eine Bestätigung per E-Mail.",
+        "",
+        "Bei Unklarheiten wenden Sie sich bitte telefonisch an die IV-Stelle:",
+        "WAS IV Luzern, Landenbergstrasse 35, 6002 Luzern | Tel. 041 369 05 00",
+    ]:
+        c.drawString(1.5*cm, y, line)
+        y -= 13
+    ftr(c, "Informationen")
+    c.showPage()
 
-    # Child details
-    y = section(y, "1. Personalien des Kindes")
-    dob = f"{fields.get('date_of_birth_day','')}.{fields.get('date_of_birth_month','')}.{fields.get('date_of_birth_year','')}"
-    y = field2(y, [
-        ("Name", fields.get('last_name',''), 1.5*cm, 3.5*cm, 5.5*cm),
-        ("Vorname", fields.get('first_name',''), 9.5*cm, 11.5*cm, 6*cm),
-    ])
-    y = field2(y, [
-        ("Geburtsdatum", dob, 1.5*cm, 4.5*cm, 4*cm),
-        ("AHV-Nummer", fields.get('ahv_number',''), 9.5*cm, 12*cm, 5.5*cm),
-    ])
-    y = field2(y, [
-        ("Geschlecht", fields.get('gender',''), 1.5*cm, 3.8*cm, 3*cm),
-        ("Nationalität", fields.get('nationality',''), 9.5*cm, 12*cm, 5.5*cm),
-    ])
-    y = field(y, "Strasse / Nr.", f"{fields.get('street','')} {fields.get('street_number','')}", x2=4.5*cm, w=13*cm)
-    y = field2(y, [
-        ("PLZ", fields.get('postal_code',''), 1.5*cm, 2.8*cm, 2*cm),
-        ("Ort", fields.get('city',''), 5.5*cm, 6.5*cm, 5*cm),
-    ])
-    y = field2(y, [
-        ("Telefon", fields.get('phone',''), 1.5*cm, 3.5*cm, 4.5*cm),
-        ("E-Mail", fields.get('email',''), 9*cm, 10.5*cm, 7*cm),
-    ])
-    y -= 5
-
-    # Guardian
-    y = section(y, "2. Gesetzliche Vertretung (Eltern / Vormund)")
-    y = field2(y, [
-        ("Name", fields.get('guardian_last_name',''), 1.5*cm, 3.5*cm, 5.5*cm),
-        ("Vorname", fields.get('guardian_first_name',''), 9.5*cm, 11.5*cm, 6*cm),
-    ])
-    y = field(y, "Beziehung zum Kind", fields.get('guardian_relationship',''), x2=5*cm, w=6*cm)
-    y -= 5
-
-    # Diagnosis
-    y = section(y, "3. Diagnose / Geburtsgebrechen")
-    y = field(y, "Diagnose (ICD-10)", fields.get('diagnosis',''), x2=4.5*cm, w=13*cm)
-    y = field(y, "GgV-EDI Ziffer", fields.get('congenital_defect_code',''), x2=4.5*cm, w=4*cm)
-    y = field(y, "Beginn der Erkrankung", fields.get('onset_of_impairment',''), x2=5*cm, w=6*cm)
-    y -= 5
-
-    # Physician
-    y = section(y, "4. Behandelnde Ärztin / Behandelnder Arzt")
-    y = field(y, "Name Arzt/Ärztin", fields.get('treating_physician_name',''), x2=5*cm, w=12*cm)
-    y = field(y, "Adresse", fields.get('treating_physician_address',''), x2=5*cm, w=12*cm)
-    y = field(y, "Telefon", fields.get('treating_physician_phone',''), x2=5*cm, w=6*cm)
-    y -= 5
-
-    # Insurance
-    y = section(y, "5. Versicherungsangaben")
-    y = field(y, "Krankenkasse", fields.get('health_insurer',''), x2=4.5*cm, w=12.5*cm)
-    y = field(y, "Bereits IV-angemeldet?", fields.get('previously_registered_iv',''), x2=6*cm, w=3*cm)
-    y -= 15
-
-    # School
-    y = section(y, "6. Schulische Situation")
-    y = field(y, "Schule / Bildungsstufe", fields.get('school',''), x2=5*cm, w=12*cm)
-    y -= 15
-
-    # Signature
-    c.setStrokeColor(HexColor('#CCCCCC'))
-    c.line(1.5*cm, y, W-1.5*cm, y)
-    y -= 20
-    c.setFont("Helvetica-Bold", 9)
+    # ── PAGE 2: Beantragte Leistung ────────────────────────
+    hdr(c, 2)
+    y = H - 65
+    y = sec(c, y, "1. Beantragte Leistung")
+    c.setFont("Helvetica", 9)
+    c.setFillColor(DARK)
+    c.drawString(1.5*cm, y, "Welche Versicherungsleistungen werden beantragt?")
     c.setFillColor(colors.black)
-    c.drawString(1.5*cm, y, "Unterschrift gesetzl. Vertretung:")
-    c.setStrokeColor(HexColor('#AAAAAA'))
-    c.line(6.5*cm, y, 15*cm, y)
+    y -= 18
+    leistungen = fields.get('requested_benefits', [])
+    y = chk(c, y, "Medizinische Massnahmen, z. B. Geburtsgebrechen",
+            "medizinisch" in str(leistungen).lower() or "medical" in str(leistungen).lower())
+    y = chk(c, y, "Massnahmen für die berufliche Eingliederung",
+            "beruflich" in str(leistungen).lower() or "vocational" in str(leistungen).lower())
+    y = chk(c, y, "Hilfsmittel (Prothese, Rollstuhl usw.)",
+            "hilfsmittel" in str(leistungen).lower() or "assistive" in str(leistungen).lower())
+    ftr(c, "1. Beantragte Leistung")
+    c.showPage()
+
+    # ── PAGE 3: Personalien des Kindes ────────────────────
+    hdr(c, 3)
+    y = H - 65
+    y = sec(c, y, "2. Personalien")
+    y = subsec(c, y, "2.1 Persönliche Angaben")
+
+    # Land
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "* In welchem Land ist Ihr Wohnsitz?")
+    c.setFillColor(colors.black)
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-13, 10*cm, 15, fill=0, stroke=1)
+    c.setFont("Helvetica", 9)
+    c.drawString(1.8*cm, y-10, fields.get('country_of_residence', 'Schweiz'))
+    y -= 28
+
+    y = fld(c, y, "Name (auch Name als ledige Person)", fields.get('last_name',''), x2=6.5*cm, w=11*cm, required=True)
+    y = fld(c, y, "Vornamen (Rufnamen bitte in Grossbuchstaben)", fields.get('first_name',''), x2=7*cm, w=10.5*cm, required=True)
+
+    # Geschlecht
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "Geschlecht")
+    c.setFillColor(colors.black)
     y -= 12
-    c.setFont("Helvetica", 8)
-    c.setFillColor(HexColor('#666666'))
-    c.drawString(1.5*cm, y, "Ort, Datum:")
+    gender = fields.get('gender', '')
+    y = rad(c, y, "weiblich", gender == 'weiblich')
+    y = rad(c, y, "männlich", gender == 'männlich')
+    y -= 4
+
+    # DOB + AHV
+    y = fld2(c, y, [
+        ("Geburtsdatum", dob_child, 1.5*cm, 4.5*cm, 4*cm, True),
+        ("AHV-Nummer", fields.get('ahv_number',''), 9.5*cm, 12*cm, 5.5*cm, True),
+    ])
+
+    # Zivilstand
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "* Zivilstand")
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-13, 6*cm, 15, fill=0, stroke=1)
+    c.setFont("Helvetica", 9)
+    c.setFillColor(colors.black)
+    c.drawString(1.8*cm, y-10, fields.get('civil_status', 'ledig'))
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(8*cm, y+2, "seit")
+    c.setStrokeColor(LINE)
+    c.line(8.8*cm, y, 13*cm, y)
+    c.setFillColor(colors.black)
+    y -= 28
+
+    y = subsec(c, y, "2.2 Gesetzlicher Wohnsitz mit genauer Adresse")
+    y = fld2(c, y, [
+        ("Strasse", fields.get('street',''), 1.5*cm, 3.5*cm, 7*cm, True),
+        ("Hausnummer", fields.get('street_number',''), 11.5*cm, 14*cm, 3.5*cm, True),
+    ])
+    y = fld2(c, y, [
+        ("Telefonnummer", fields.get('phone',''), 1.5*cm, 4*cm, 5*cm, True),
+        ("E-Mail", fields.get('email',''), 10*cm, 11.5*cm, 6*cm, False),
+    ])
+    # PLZ Ort
+    y = fld2(c, y, [
+        ("Postleitzahl, Ort", f"{fields.get('postal_code','')} {fields.get('city','')}",
+         1.5*cm, 4*cm, 6*cm, False),
+    ])
+    y -= 4
+
+    y = subsec(c, y, "2.3 Beistandschaft")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Besteht eine Beistandschaft?")
+    y -= 12
+    y = rad(c, y, "ja", False)
+    y = rad(c, y, "nein", True)
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Besteht eine Vormundschaft?")
+    y -= 12
+    y = rad(c, y, "ja", False)
+    y = rad(c, y, "nein", True)
+    y -= 4
+
+    y = subsec(c, y, "2.4 Staatsangehörigkeit")
+    nat = fields.get('nationality', 'Schweiz')
+    if 'schweiz' in nat.lower() or 'swiss' in nat.lower():
+        c.setFont("Helvetica", 8.5)
+        c.drawString(1.5*cm, y, "Schweizer Bürgerinnen und Bürger")
+        y -= 12
+        y = fld(c, y, "Heimatgemeinde/Kanton", fields.get('home_municipality', ''), x2=5.5*cm, w=5*cm)
+    else:
+        c.setFont("Helvetica", 8.5)
+        c.drawString(1.5*cm, y, "Ausländische Staatsangehörige")
+        y -= 12
+        y = fld2(c, y, [
+            ("Staatsangehörigkeit", nat, 1.5*cm, 5*cm, 5*cm, False),
+            ("Datum der Einreise in die Schweiz", fields.get('entry_date_switzerland',''), 10*cm, 14*cm, 3.5*cm, False),
+        ])
+    y -= 4
+
+    y = subsec(c, y, "2.5 Wer hat das Formular ausgefüllt?")
+    y = rad(c, y, "Die versicherte Person", False)
+    y = rad(c, y, "Eine Drittperson", True)
+    y = fld2(c, y, [
+        ("Name, Vorname", fields.get('guardian_last_name','') + ' ' + fields.get('guardian_first_name',''),
+         1.5*cm, 4.5*cm, 5.5*cm, True),
+        ("E-Mail", fields.get('email',''), 10.5*cm, 12*cm, 5.5*cm, False),
+    ])
+
+    ftr(c, "2. Personalien")
+    c.showPage()
+
+    # ── PAGE 4: Personalien der Eltern ────────────────────
+    hdr(c, 4)
+    y = H - 65
+    y = sec(c, y, "3. Personalien der Eltern")
+    y = subsec(c, y, "3.1 Erstes Elternteil — 3.1.1 Persönliche Angaben")
+    y = fld(c, y, "* Name (auch Name als ledige Person)", fields.get('guardian_last_name',''), x2=6.5*cm, w=11*cm)
+    y = fld(c, y, "* Vornamen", fields.get('guardian_first_name',''), x2=4.5*cm, w=13*cm)
+    dob_parent1 = f"{fields.get('guardian_dob_day','')}.{fields.get('guardian_dob_month','')}.{fields.get('guardian_dob_year','')}"
+    y = fld2(c, y, [
+        ("Geburtsdatum", dob_parent1, 1.5*cm, 4.5*cm, 4*cm, True),
+        ("AHV-Nummer", fields.get('guardian_ahv',''), 9.5*cm, 12*cm, 5.5*cm, False),
+    ])
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "Zivilstand")
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-13, 5*cm, 15, fill=0, stroke=1)
+    c.setFont("Helvetica", 9)
+    c.setFillColor(colors.black)
+    c.drawString(1.8*cm, y-10, fields.get('guardian_civil_status', 'verheiratet'))
+    y -= 28
+    y = subsec(c, y, "3.1.2 Gesetzlicher Wohnsitz")
+    y = fld2(c, y, [
+        ("Postleitzahl, Ort", f"{fields.get('postal_code','')} {fields.get('city','')}",
+         1.5*cm, 4.5*cm, 5*cm, False),
+        ("Strasse, Hausnummer", f"{fields.get('street','')} {fields.get('street_number','')}",
+         10.5*cm, 13*cm, 4.5*cm, False),
+    ])
+    y = fld2(c, y, [
+        ("Telefonnummer", fields.get('phone',''), 1.5*cm, 4*cm, 5*cm, False),
+        ("E-Mail", fields.get('email',''), 10*cm, 11.5*cm, 6*cm, False),
+    ])
+    y = subsec(c, y, "3.1.3 Staatsangehörigkeit")
+    y = fld(c, y, "Staatsangehörigkeit", fields.get('nationality',''), x2=5*cm, w=5*cm)
+    y -= 4
+
+    y = subsec(c, y, "3.2 Zweites Elternteil — 3.2.1 Persönliche Angaben")
+    y = fld(c, y, "Name (auch Name als ledige Person)", fields.get('parent2_last_name',''), x2=6.5*cm, w=11*cm)
+    y = fld(c, y, "Vornamen", fields.get('parent2_first_name',''), x2=4.5*cm, w=13*cm)
+    dob_parent2 = f"{fields.get('parent2_dob_day','')}.{fields.get('parent2_dob_month','')}.{fields.get('parent2_dob_year','')}"
+    y = fld2(c, y, [
+        ("Geburtsdatum", dob_parent2, 1.5*cm, 4.5*cm, 4*cm, False),
+        ("AHV-Nummer", fields.get('parent2_ahv',''), 9.5*cm, 12*cm, 5.5*cm, False),
+    ])
+    y = subsec(c, y, "3.2.2 Gesetzlicher Wohnsitz")
+    y = fld2(c, y, [
+        ("Postleitzahl, Ort", f"{fields.get('postal_code','')} {fields.get('city','')}",
+         1.5*cm, 4.5*cm, 5*cm, False),
+        ("Strasse, Hausnummer", f"{fields.get('street','')} {fields.get('street_number','')}",
+         10.5*cm, 13*cm, 4.5*cm, False),
+    ])
+    y -= 4
+    y = subsec(c, y, "3.3 Sorgerecht")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Bei getrennt lebenden Eltern: Wem steht das elterliche Sorgerecht zu?")
+    y -= 14
+    y = chk(c, y, "Gemeinsam", True)
+    y = chk(c, y, "Erstes Elternteil", False)
+    y = chk(c, y, "Zweites Elternteil", False)
+    y -= 6
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Wer soll als Korrespondenzempfänger vermerkt werden?")
+    y -= 14
+    y = rad(c, y, "Erstes Elternteil", True)
+    y = rad(c, y, "Zweites Elternteil", False)
+
+    ftr(c, "3. Personalien der Eltern")
+    c.showPage()
+
+    # ── PAGE 5: Angaben zur Ausbildung/Tätigkeit ──────────
+    hdr(c, 5)
+    y = H - 65
+    y = sec(c, y, "4. Angaben zur Ausbildung/Tätigkeit der versicherten Person")
+    y = subsec(c, y, "4.1 Gegenwärtig besuchte Schule")
+    y = fld(c, y, "Bezeichnung und Adresse der Schule", fields.get('school',''), x2=6*cm, w=9.5*cm)
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(15.8*cm, y+19, "seit")
+    c.setStrokeColor(LINE)
+    c.line(16.8*cm, y+17, W-1.5*cm, y+17)
+    y -= 6
+
+    y = subsec(c, y, "4.2 Früher besuchte Schule")
+    y = fld(c, y, "Bezeichnung und Adresse der Schule", '', x2=6*cm, w=9.5*cm)
+    y -= 6
+
+    y = subsec(c, y, "4.3 Ausbildung")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Befindet sich Ihr Kind in erstmaliger beruflicher Ausbildung oder steht ein Ausbildungsplatz in Aussicht?")
+    y -= 14
+    y = rad(c, y, "ja", False)
+    y = rad(c, y, "nein", True)
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Entstehen durch die Behinderung Mehrkosten für diese Ausbildung?")
+    y -= 14
+    y = rad(c, y, "ja", False)
+    y = rad(c, y, "nein", True)
+    y -= 6
+
+    y = subsec(c, y, "4.4 Erwerbstätigkeit")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "War Ihr Kind bereits erwerbstätig?")
+    y -= 14
+    y = rad(c, y, "ja", False)
+    y = rad(c, y, "nein", True)
+
+    ftr(c, "4. Ausbildung/Tätigkeit")
+    c.showPage()
+
+    # ── PAGE 6: Allgemeine Angaben ────────────────────────
+    hdr(c, 6)
+    y = H - 65
+    y = sec(c, y, "5. Allgemeine Angaben")
+    y = subsec(c, y, "5.1 Frühere Anmeldungen")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Wurde für Ihr Kind bereits einmal eine Anmeldung zum Bezug von IV-Leistungen eingereicht?")
+    y -= 14
+    prev = fields.get('previously_registered_iv', 'Nein')
+    y = rad(c, y, "ja", prev == 'Ja')
+    y = rad(c, y, "nein", prev != 'Ja')
+    y -= 6
+
+    y = subsec(c, y, "5.2 Versicherungen")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Ist Ihr Kind angemeldet bzw. erhält Leistungen (z. B. ärztliche Behandlung, Rente, Hilfsmittel):")
+    y -= 14
+    y = chk(c, y, "der SUVA?", False)
+    y = chk(c, y, "einer anderen Versicherung im Rahmen der obligatorischen Unfallversicherung?", False)
+    y = chk(c, y, "der Militärversicherung?", False)
+    y -= 6
+
+    y = subsec(c, y, "5.3 Krankenkasse")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Bei welcher Krankenkasse ist Ihr Kind versichert (Grundversicherung)? Name und Adresse:")
+    y -= 14
+    c.setStrokeColor(LINE)
+    c.line(1.5*cm, y, W-1.5*cm, y)
+    c.setFont("Helvetica", 9)
+    c.drawString(1.5*cm, y+2, fields.get('health_insurer', ''))
+    y -= 20
+
+    y = subsec(c, y, "5.4 Behörden und Institutionen")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y,
+        "Welche Behörden oder Institutionen haben sich bereits mit der Behinderung befasst?")
+    y -= 12
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y, "(Schulbehörden, Schulpsychologischer Dienst, Erziehungsberatung, Berufsberatung usw.)")
+    c.setFillColor(colors.black)
+    y -= 14
+    y = fld2(c, y, [
+        ("Name und Ort", fields.get('institutions_involved',''), 1.5*cm, 4.5*cm, 7.5*cm, False),
+        ("Zeitpunkt", "", 13*cm, 14.5*cm, 3*cm, False),
+    ])
+    y = fld2(c, y, [
+        ("", "", 1.5*cm, 4.5*cm, 7.5*cm, False),
+        ("", "", 13*cm, 14.5*cm, 3*cm, False),
+    ])
+
+    ftr(c, "5. Allgemeine Angaben")
+    c.showPage()
+
+    # ── PAGE 7: Gesundheitliche Beeinträchtigung ──────────
+    hdr(c, 7)
+    y = H - 65
+    y = sec(c, y, "6. Angaben zur gesundheitlichen Beeinträchtigung")
+    y = subsec(c, y, "6.1 Nähere Angaben zur Art der gesundheitlichen Beeinträchtigung")
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-45, W-3*cm, 45, fill=0, stroke=1)
+    c.setFont("Helvetica", 9)
+    diag = fields.get('diagnosis', '')
+    if diag:
+        c.drawString(1.8*cm, y-15, diag[:100])
+        if len(diag) > 100:
+            c.drawString(1.8*cm, y-28, diag[100:200])
+    y -= 54
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "Seit wann besteht die gesundheitliche Beeinträchtigung?")
+    c.setFillColor(colors.black)
+    c.setStrokeColor(LINE)
+    c.line(8.5*cm, y, 14*cm, y)
+    c.setFont("Helvetica", 9)
+    c.drawString(8.7*cm, y+2, fields.get('onset_of_impairment', ''))
+    y -= 18
+
+    y = subsec(c, y, "6.2 Unfall oder Schadensereignis")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Die gesundheitliche Beeinträchtigung ist zurückzuführen auf:")
+    y -= 14
+    y = chk(c, y, "einen Unfall (z. B. Strassenverkehr, Ausübung sportlicher Aktivität, Gewaltdelikt usw.)", False)
+    y = chk(c, y, "ein anderes Schadensereignis (z. B. ärztliche Sorgfaltspflichtverletzung, Infekt im Spital)", False)
+    y = chk(c, y, "eine Krankheit", True)
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "Ergänzende Bemerkungen zum Ereignis:")
+    c.setFillColor(colors.black)
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-25, W-3*cm, 25, fill=0, stroke=1)
+    y -= 34
+
+    y = subsec(c, y, "6.3 Arzt, Spital oder Pflegeheim")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Bitte geben Sie Ihren Hausarzt sowie weitere behandelnde Ärzte, Spitäler oder Pflegeheime an:")
+    y -= 14
+    y = fld(c, y, "Name und Adresse",
+            f"{fields.get('treating_physician_name','')} | {fields.get('treating_physician_address','')}",
+            x2=4.5*cm, w=13*cm)
+    y = fld2(c, y, [
+        ("Fachrichtung", fields.get('specialty',''), 1.5*cm, 4*cm, 5.5*cm, False),
+        ("Für welche Leiden?", fields.get('diagnosis','')[:40], 10*cm, 13*cm, 4.5*cm, False),
+    ])
+    y = fld2(c, y, [
+        ("In Behandlung von", fields.get('onset_of_impairment',''), 1.5*cm, 4.5*cm, 4*cm, False),
+        ("In Behandlung bis", "", 9.5*cm, 13*cm, 4.5*cm, False),
+    ])
+    y -= 4
+
+    y = subsec(c, y, "6.4 Hilfsmittel")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y, "Besitzt Ihr Kind bereits Hilfsmittel (z. B. Prothesen, Rollstuhl)?")
+    y -= 14
+    has_aids = fields.get('has_assistive_devices', 'nein')
+    y = rad(c, y, "ja", has_aids == 'ja')
+    y = rad(c, y, "nein", has_aids != 'ja')
+    y -= 4
+
+    y = subsec(c, y, "6.5 Ergänzende Bemerkungen")
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-30, W-3*cm, 30, fill=0, stroke=1)
+    y -= 38
+
+    ftr(c, "6. Gesundheit")
+    c.showPage()
+
+    # ── PAGE 8: Zahlungsverbindung ────────────────────────
+    hdr(c, 8)
+    y = H - 65
+    y = sec(c, y, "7. Zahlungsverbindung")
+    y = rad(c, y, "Bankkonto", True)
+    y = rad(c, y, "Postkonto", False)
+    y -= 5
+    y = fld(c, y, "lautend auf (Name/Vorname)", fields.get('bank_account_holder',
+            f"{fields.get('guardian_last_name','')} {fields.get('guardian_first_name','')}"),
+            x2=5*cm, w=12*cm)
+    y = fld(c, y, "* IBAN", fields.get('iban',''), x2=3*cm, w=14*cm)
+    y = fld(c, y, "Name und Adresse der Bank", fields.get('bank_name',''), x2=5.5*cm, w=12*cm)
+    ftr(c, "7. Zahlungsverbindung")
+    c.showPage()
+
+    # ── PAGE 9: Ermächtigung ──────────────────────────────
+    hdr(c, 9)
+    y = H - 65
+    y = sec(c, y, "Ermächtigung zur Erteilung von Auskünften")
+    c.setFont("Helvetica", 8.5)
+    for line in [
+        "Mit der Geltendmachung des Leistungsanspruchs ermächtigt die versicherte Person",
+        "oder ihr/e Vertreter/in die in der Anmeldung erwähnten Personen und Stellen,",
+        "den Organen der Invalidenversicherung alle Auskünfte zu erteilen und alle",
+        "Unterlagen zur Verfügung zu stellen, die für die Abklärung von Leistungs-",
+        "und Regressansprüchen erforderlich sind. Diese Personen und Stellen sind",
+        "zur Auskunft verpflichtet.",
+        "",
+        "Diese Ermächtigung berechtigt die IV-Stelle, die für die Eingliederung infrage",
+        "kommenden Stellen (behandelnde Ärzte, Arbeitgebende, Institutionen) zu informieren.",
+    ]:
+        c.drawString(1.5*cm, y, line)
+        y -= 12
+    ftr(c, "Ermächtigung")
+    c.showPage()
+
+    # ── PAGE 10: Mitwirkungspflicht ───────────────────────
+    hdr(c, 10)
+    y = H - 65
+    y = sec(c, y, "Mitwirkungspflicht")
+    c.setFont("Helvetica", 8.5)
+    for line in [
+        "Die versicherte Person verpflichtet sich, alles ihr Zumutbare zu unternehmen,",
+        "um die Dauer und das Ausmass der Arbeitsunfähigkeit zu verringern und den",
+        "Eintritt einer Invalidität zu verhindern. Im Weiteren nimmt sie zur Kenntnis,",
+        "dass sie an allen zumutbaren Massnahmen aktiv teilnehmen muss.",
+    ]:
+        c.drawString(1.5*cm, y, line)
+        y -= 12
+    ftr(c, "Mitwirkungspflicht")
+    c.showPage()
+
+    # ── PAGE 11: Wahrheitsgetreue Angaben ─────────────────
+    hdr(c, 11)
+    y = H - 65
+    y = sec(c, y, "Wahrheitsgetreue und vollständige Angaben")
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-10, 10, 10, fill=0, stroke=1)
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.8*cm+10, y-8,
+        "Mit dem Versand dieses Formulars bestätigt die Person, die die Anmeldung ausgefüllt hat,")
+    y -= 12
+    c.drawString(1.8*cm+10, y-8,
+        "dass sämtliche Angaben und die dazugehörenden Beilagen wahrheitsgetreu und vollständig sind.")
+    y -= 25
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "Datum")
+    c.setFillColor(colors.black)
+    c.setStrokeColor(LINE)
+    c.line(3*cm, y, 8*cm, y)
+    c.setFont("Helvetica", 9)
+    c.drawString(3.2*cm, y+2, fields.get('date_created', ''))
+    y -= 20
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(GRAY)
+    c.drawString(1.5*cm, y+2, "Bemerkungen")
+    c.setFillColor(colors.black)
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-35, W-3*cm, 35, fill=0, stroke=1)
+    ftr(c, "Wahrheitsgetreue Angaben")
+    c.showPage()
+
+    # ── PAGE 12: Beilagen ─────────────────────────────────
+    hdr(c, 12)
+    y = H - 65
+    y = sec(c, y, "Beilagen")
+    c.setFont("Helvetica", 8.5)
+    c.drawString(1.5*cm, y,
+        "Untenstehend sind alle Dokumente aufgeführt, welche Sie einreichen können.")
+    y -= 14
+    y = subsec(c, y, "Pflichtbeilagen")
+    required_docs = [
+        "Kopie eines amtlichen Personalausweises (Familienbüchlein, Personalstandsausweis oder Familienausweis)",
+        "Für ausländische Staatsangehörige: Kopie Ihres Ausländerausweises",
+        "Kopie Arztzeugnis/Arztbericht",
+    ]
+    for doc in required_docs:
+        y = chk(c, y, doc, False)
+    y -= 6
+    y = subsec(c, y, "Optionale Beilagen")
+    optional_docs = [
+        "Kopien Ausbildungsbescheinigungen und Belege von Lehrbetrieben",
+        "Rechnungskopien oder Kostenvoranschläge für Hilfsmittel",
+        "Kopie der Ernennungsurkunde Beistandschaft/Vormund",
+        "Kopie Beschreibung der Pflichten und Aufgabe des Beistandes",
+        "Sorgerechtsregelung",
+        "Andere",
+    ]
+    for doc in optional_docs:
+        y = chk(c, y, doc, False)
+    c.setFillColor(RED)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(1.5*cm, y-5, "Die Kopie eines amtlichen Personalausweises ist obligatorisch.")
+    c.setFillColor(colors.black)
+    ftr(c, "Beilagen")
+    c.showPage()
+
+    # ── PAGE 13: Empfängerauswahl ──────────────────────────
+    hdr(c, 13)
+    y = H - 65
+    y = sec(c, y, "Empfängerauswahl")
+    c.setFont("Helvetica", 9)
+    c.drawString(1.5*cm, y, "* Bitte wählen Sie die IV-Stelle Ihres Wohnkantons:")
+    y -= 18
+    c.setStrokeColor(LINE)
+    c.rect(1.5*cm, y-14, 12*cm, 16, fill=0, stroke=1)
+    c.setFont("Helvetica", 9)
+    c.drawString(1.8*cm, y-10, "Luzern — WAS IV Luzern, Landenbergstrasse 35, 6002 Luzern")
+    y -= 30
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(1.5*cm, y, "Empfänger:")
+    c.setFont("Helvetica", 9)
+    c.drawString(4*cm, y, "WAS IV Luzern")
+    y -= 13
+    c.drawString(4*cm, y, "Landenbergstrasse 35, Postfach")
+    y -= 13
+    c.drawString(4*cm, y, "6002 Luzern")
+    y -= 13
+    c.drawString(4*cm, y, "Tel. 041 369 05 00")
+    y -= 30
+
+    # Summary box
+    c.setFillColor(HexColor('#F9F9F9'))
+    c.rect(1.5*cm, y-70, W-3*cm, 75, fill=1, stroke=0)
+    c.setFillColor(RED)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(2*cm, y-5, "Zusammenfassung — Angemeldetes Kind:")
     c.setFillColor(colors.black)
     c.setFont("Helvetica", 9)
-    c.drawString(4.5*cm, y, f"{fields.get('city','')}, {fields.get('date_created','')}")
-    y -= 25
+    summary = [
+        f"Name: {fields.get('last_name','')} {fields.get('first_name','')}",
+        f"Geburtsdatum: {dob_child}",
+        f"AHV-Nummer: {fields.get('ahv_number','')}",
+        f"Adresse: {fields.get('street','')} {fields.get('street_number','')}, {fields.get('postal_code','')} {fields.get('city','')}",
+        f"Gesetzliche Vertretung: {fields.get('guardian_last_name','')} {fields.get('guardian_first_name','')}",
+    ]
+    sy = y - 20
+    for s in summary:
+        c.drawString(2*cm, sy, s)
+        sy -= 12
 
-    # Attachments
-    c.setStrokeColor(HexColor('#CC0000'))
-    c.setLineWidth(0.5)
-    c.rect(1.5*cm, y-65, W-3*cm, 75, fill=0, stroke=1)
-    c.setFillColor(HexColor('#CC0000'))
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(2*cm, y, "Beizulegende Unterlagen:")
-    c.setFillColor(colors.black)
-    c.setFont("Helvetica", 8)
-    ay = y - 13
-    for att in [
-        "• Kopie amtlicher Ausweis des Kindes",
-        "• Arztbericht (Formular 002.003) ausgefüllt durch behandelnde Ärztin / Arzt",
-        "• Geburtszeugnis des Kindes",
-        "• Krankenversicherungsnachweis",
-    ]:
-        c.drawString(2*cm, ay, att)
-        ay -= 12
-
-    # Footer
-    c.setFillColor(HexColor('#666666'))
-    c.setFont("Helvetica", 7)
-    c.drawString(1.5*cm, 1.5*cm,
-        "WAS IV Luzern | Landenbergstrasse 35, Postfach, 6002 Luzern | Tel. 041 369 05 00")
-    c.drawRightString(W-1.5*cm, 1.5*cm, "Formular 001.003 | Version 01/26")
-
+    ftr(c, "Empfängerauswahl")
     c.showPage()
     c.save()
 
@@ -982,7 +1367,7 @@ def run_pdf_job(job_id, form_number, fields):
         if form_number == "001.001":
             draw_form_001001_full(fields, pdf_path)
         elif form_number == "001.003":
-            draw_form_001003(fields, pdf_path)
+            draw_form_001003_full(fields, pdf_path)
         elif form_number == "002.003":
             draw_form_002003(fields, pdf_path)
         else:
